@@ -3,9 +3,14 @@ import base64
 import contextlib
 import importlib.util
 import io
+import ipaddress
 import json
+import os
 from pathlib import Path
 import tempfile
+import subprocess
+import sys
+from urllib.parse import urlsplit
 import unittest
 from unittest import mock
 
@@ -89,178 +94,281 @@ class FilesystemTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='.antigravity-unit-', dir=str(SCRIPT.parent))
         self.root = Path(self.temp.name)
+        self.app = self.root / '安装 目录'
+        self.menu = self.root / 'Start Menu'
+        self.desktop = self.root / 'Desktop'
+        self.public = self.root / 'Public Start Menu'
+        for path in (self.app, self.menu, self.desktop, self.public):
+            path.mkdir()
+        (self.app / 'Antigravity.exe').write_bytes(b'fixture executable')
+        self.links = {}
+        self.policy = 'RemoteSigned'
         self.output = contextlib.redirect_stdout(io.StringIO())
         self.output.__enter__()
-        self.ps = mock.patch.object(TOOL, 'run_powershell', return_value={'notified': True})
+        self.ps = mock.patch.object(TOOL, 'run_powershell', side_effect=self.bridge)
         self.ps_mock = self.ps.start()
+        self.scanner = mock.patch.dict(os.environ, {'APPDATA': str(self.root / 'Roaming')})
+        self.scanner.start()
 
     def tearDown(self):
+        self.scanner.stop()
         self.ps.stop()
         self.output.__exit__(None, None, None)
         self.temp.cleanup()
 
+    def args(self, extra=None, preview=False):
+        return type('Args', (), {'app_dir': str(self.app), 'scan_root': extra or [], 'dry_run': preview})()
+
+    def inventory(self):
+        return {str(p.relative_to(self.root)): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+
+    def link(self, parent=None, arguments=''):
+        path = (parent or self.desktop) / 'Antigravity.lnk'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b'fixture shortcut')
+        self.links[str(path)] = dict(path=str(path), target=str(self.app / 'Antigravity.exe'),
+                                    arguments=arguments, icon=str(self.app / 'Antigravity.exe') + ',0',
+                                    working_directory=str(self.app), window_style=1)
+        return path
+
+    def bridge(self, request):
+        action = request['action']
+        if action == 'policy':
+            return {'effective': self.policy}
+        if action == 'folders':
+            return {'Desktop': str(self.desktop), 'StartMenu': str(self.menu), 'AllUsersStartMenu': str(self.public)}
+        if action == 'read':
+            return {'links': [dict(self.links[p], snapshot_hash=TOOL.sha256(Path(p).read_bytes()))
+                              for p in request['paths'] if p in self.links], 'errors': []}
+        if action == 'write':
+            path = Path(request['path'])
+            current_hash = TOOL.sha256(path.read_bytes()) if path.exists() else None
+            if current_hash != request.get('before_hash'):
+                raise RuntimeError('Shortcut changed since inspection')
+            self.links[str(path)] = {key: request[key] for key in
+                                    ('path', 'target', 'arguments', 'icon', 'working_directory')}
+            self.links[str(path)]['window_style'] = request.get('window_style', 7)
+            path.write_text(json.dumps(self.links[str(path)], ensure_ascii=False), encoding='utf-8')
+            return {'saved': str(path)}
+        if action == 'notify':
+            return {'notified': True}
+        self.fail('Unexpected action: ' + action)
+
     def test_scan_deduplicates_and_excludes_backup_and_git(self):
-        desktop = self.root / '中文 桌面'
-        desktop.mkdir()
-        (desktop / 'renamed.LNK').write_bytes(b'fake-shortcut')
+        (self.desktop / 'renamed.LNK').write_bytes(b'fake-shortcut')
         for name in ('antigravity-proxy-backups', 'Antigravity-proxy-backup-20261026', '.git'):
-            folder = desktop / name
+            folder = self.desktop / name
             folder.mkdir()
             (folder / 'Antigravity.lnk').write_bytes(b'backup')
-        (desktop / 'unrelated.txt').write_text('unrelated', encoding='utf-8')
-        links, errors = TOOL.find_shortcuts([desktop, desktop])
-        self.assertEqual(links, [str(desktop / 'renamed.LNK')])
+        links, errors = TOOL.find_shortcuts([self.desktop, self.desktop])
+        self.assertEqual(links, [str(self.desktop / 'renamed.LNK')])
         self.assertEqual(errors, [])
 
-    def test_install_preview_creates_no_launchers_shortcuts_or_backups(self):
-        (self.root / 'Antigravity.exe').write_bytes(b'fake-executable')
-        menu = self.root / 'Start Menu'
+    def test_install_preview_creates_no_files_or_directories(self):
+        self.link()
+        before = self.inventory()
+        directories = {p for p in self.root.rglob('*') if p.is_dir()}
+        self.assertEqual(TOOL.install(self.args(preview=True)), 0)
+        self.assertEqual(self.inventory(), before)
+        self.assertEqual({p for p in self.root.rglob('*') if p.is_dir()}, directories)
 
+    def test_install_has_no_backup_and_repeat_changes_nothing(self):
+        target = self.link(arguments='--title "中文 a & b" --empty ""')
+        before = set(self.inventory())
+        self.assertEqual(TOOL.install(self.args()), 0)
+        self.assertEqual(set(self.inventory()) - before, {
+            str(Path('安装 目录') / 'Antigravity-Proxy.cmd'),
+            str(Path('安装 目录') / 'Antigravity-Proxy.ps1'),
+            str(Path('Start Menu') / 'Programs' / 'Antigravity (Proxy).lnk'),
+        })
+        self.assertEqual(TOOL.read_launcher_scan_roots(self.app), [])
+        self.assertEqual(self.links[str(target)]['target'], str(self.app / 'Antigravity-Proxy.cmd'))
+        after = self.inventory()
+        self.assertEqual(TOOL.install(self.args()), 0)
+        self.assertEqual(self.inventory(), after)
+
+    def test_policy_rejection_changes_nothing(self):
+        self.link()
+        before = self.inventory()
+        for policy in ('Restricted', 'AllSigned', 'unknown'):
+            self.policy = policy
+            with self.subTest(policy=policy), self.assertRaisesRegex(ValueError, '执行策略'):
+                TOOL.install(self.args())
+            self.assertEqual(self.inventory(), before)
+
+    def test_explicit_missing_scan_root_changes_nothing(self):
+        before = self.inventory()
+        with self.assertRaisesRegex(ValueError, '自定义快捷方式目录'):
+            TOOL.install(self.args([str(self.root / 'missing')]))
+        self.assertEqual(self.inventory(), before)
+
+    def test_custom_directories_are_recorded_and_merged_without_extra_files(self):
+        custom = self.root / 'custom'
+        custom2 = self.root / 'custom2'
+        custom.mkdir()
+        custom2.mkdir()
+        target = self.link(custom)
+        self.assertEqual(TOOL.install(self.args([str(custom)])), 0)
+        self.assertEqual(TOOL.read_launcher_scan_roots(self.app), [str(custom.resolve())])
+        self.assertEqual(TOOL.install(self.args([str(custom2)])), 0)
+        self.assertEqual(set(TOOL.read_launcher_scan_roots(self.app)), {str(custom.resolve()), str(custom2.resolve())})
+        self.assertEqual(self.links[str(target)]['target'], str(self.app / 'Antigravity-Proxy.cmd'))
+        self.assertEqual({p.name for p in self.app.iterdir()},
+                         {'Antigravity.exe', 'Antigravity-Proxy.cmd', 'Antigravity-Proxy.ps1'})
+
+    def test_missing_recorded_directory_prevents_changes(self):
+        custom = self.root / 'custom'
+        custom.mkdir()
+        self.assertEqual(TOOL.install(self.args([str(custom)])), 0)
+        custom.rmdir()
+        before = self.inventory()
+        with self.assertRaisesRegex(ValueError, '自定义快捷方式目录'):
+            TOOL.install(self.args())
+        self.assertEqual(self.inventory(), before)
+
+    def test_invalid_metadata_is_not_executed_or_overwritten(self):
+        script = self.app / 'Antigravity-Proxy.ps1'
+        script.write_text(TOOL.METADATA_PREFIX + '{"format":1,"scan_roots":"wrong"}\nthrow "never execute"', encoding='utf-8')
+        before = self.inventory()
+        with self.assertRaisesRegex(ValueError, '记录无效'):
+            TOOL.install(self.args())
+        self.assertEqual(self.inventory(), before)
+
+    def test_public_shortcut_permission_failure_gets_personal_fallback(self):
+        public_link = self.link(self.public / 'Programs')
+        original = public_link.read_bytes()
         def bridge(request):
-            if request['action'] == 'folders':
-                return {'StartMenu': str(menu)}
-            if request['action'] == 'read':
-                return {'links': [], 'errors': []}
-            self.fail('Preview called a mutating bridge action')
+            if request['action'] == 'write' and request['path'] == str(public_link):
+                raise PermissionError('Public Start Menu is read-only')
+            return self.bridge(request)
+        self.ps_mock.side_effect = bridge
+        self.assertEqual(TOOL.install(self.args()), 2)
+        self.assertEqual(public_link.read_bytes(), original)
+        personal = self.menu / 'Programs' / 'Antigravity (Proxy).lnk'
+        self.assertTrue(personal.is_file())
+        self.assertEqual(self.links[str(personal)]['target'], str(self.app / 'Antigravity-Proxy.cmd'))
 
-        args = type('Args', (), {'app_dir': str(self.root), 'scan_root': [], 'dry_run': True})()
-        with mock.patch.object(TOOL, 'run_powershell', side_effect=bridge):
-            self.assertEqual(TOOL.install(args), 0)
-        self.assertEqual([path.name for path in self.root.iterdir()], ['Antigravity.exe'])
+    def test_launcher_write_failure_rolls_back_before_shortcut_changes(self):
+        target = self.link()
+        before = self.inventory()
+        original_atomic_write = TOOL.atomic_write
+        def atomic_write(path, data):
+            if path.name == 'Antigravity-Proxy.cmd':
+                raise PermissionError('locked CMD')
+            original_atomic_write(path, data)
+        with mock.patch.object(TOOL, 'atomic_write', side_effect=atomic_write):
+            with self.assertRaisesRegex(RuntimeError, '部署失败'):
+                TOOL.install(self.args())
+        self.assertEqual(self.inventory(), before)
+        self.assertTrue(target.is_file())
 
-    def test_restore_existing_file_exactly_and_repeat(self):
-        target = self.root / '中文 快捷方式.lnk'
-        original = bytes(range(256))
-        target.write_bytes(original)
-        backup = TOOL.Backup(self.root)
-        entry = backup.prepare(target)
-        TOOL.atomic_write(target, b'repaired')
-        backup.complete(entry)
-        self.assertEqual(TOOL.restore_backup(backup.folder), 0)
-        self.assertEqual(target.read_bytes(), original)
-        self.assertEqual(TOOL.restore_backup(backup.folder), 0)
-        self.assertEqual(target.read_bytes(), original)
+    def test_interrupt_after_atomic_replace_rolls_back_both_launchers(self):
+        self.link()
+        before = self.inventory()
+        original_atomic_write = TOOL.atomic_write
+        def atomic_write(path, data):
+            original_atomic_write(path, data)
+            if path.name == 'Antigravity-Proxy.cmd':
+                raise KeyboardInterrupt()
+        with mock.patch.object(TOOL, 'atomic_write', side_effect=atomic_write):
+            with self.assertRaises(KeyboardInterrupt):
+                TOOL.install(self.args())
+        self.assertEqual(self.inventory(), before)
 
-    def test_restore_removes_only_new_files(self):
-        target = self.root / 'Antigravity-Proxy.cmd'
-        backup = TOOL.Backup(self.root)
-        entry = backup.prepare(target)
-        target.write_bytes(b'new launcher')
-        backup.complete(entry)
-        self.assertEqual(TOOL.restore_backup(backup.folder), 0)
-        self.assertFalse(target.exists())
+    def test_failed_deployment_does_not_overwrite_concurrent_launcher_edit(self):
+        script = self.app / 'Antigravity-Proxy.ps1'
+        script.write_text('original user launcher', encoding='utf-8')
+        original_atomic_write = TOOL.atomic_write
+        def atomic_write(path, data):
+            if path.name == 'Antigravity-Proxy.cmd':
+                script.write_bytes(b'concurrent-user-edit')
+                raise PermissionError('locked CMD')
+            original_atomic_write(path, data)
+        with mock.patch.object(TOOL, 'atomic_write', side_effect=atomic_write):
+            with self.assertRaisesRegex(RuntimeError, '回退未完成'):
+                TOOL.install(self.args())
+        self.assertEqual(script.read_bytes(), b'concurrent-user-edit')
+        self.assertFalse((self.app / 'Antigravity-Proxy.cmd').exists())
 
-    def test_restore_dry_run_does_not_modify_or_notify(self):
-        target = self.root / 'example.lnk'
-        target.write_bytes(b'old')
-        backup = TOOL.Backup(self.root)
-        entry = backup.prepare(target)
-        target.write_bytes(b'new')
-        backup.complete(entry)
-        self.assertEqual(TOOL.restore_backup(backup.folder, preview=True), 0)
-        self.assertEqual(target.read_bytes(), b'new')
-        self.ps_mock.assert_not_called()
-
-    def test_restore_preserves_user_changes(self):
-        target = self.root / 'example.lnk'
-        target.write_bytes(b'old')
-        backup = TOOL.Backup(self.root)
-        entry = backup.prepare(target)
-        target.write_bytes(b'repaired')
-        backup.complete(entry)
-        target.write_bytes(b'user-changed-icon')
-        self.assertEqual(TOOL.restore_backup(backup.folder), 2)
-        self.assertEqual(target.read_bytes(), b'user-changed-icon')
-
-    def test_corrupt_backup_is_not_applied(self):
-        target = self.root / 'example.lnk'
-        target.write_bytes(b'original')
-        backup = TOOL.Backup(self.root)
-        entry = backup.prepare(target)
-        target.write_bytes(b'repaired')
-        backup.complete(entry)
-        (backup.folder / entry['backup']).write_bytes(b'corrupt')
-        self.assertEqual(TOOL.restore_backup(backup.folder), 2)
-        self.assertEqual(target.read_bytes(), b'repaired')
-
-    def test_restore_conflict_keeps_required_launcher(self):
-        launcher = self.root / 'Antigravity-Proxy.cmd'
-        target = self.root / 'example.lnk'
-        target.write_bytes(b'original-link')
-        backup = TOOL.Backup(self.root)
-        launcher_entry = backup.prepare(launcher)
-        launcher.write_bytes(b'new-launcher')
-        backup.complete(launcher_entry)
-        link_entry = backup.prepare(target)
-        target.write_bytes(b'repaired-link-targeting-proxy')
-        backup.complete(link_entry)
-        target.write_bytes(b'user-changed-icon-still-targeting-proxy')
-        self.assertEqual(TOOL.restore_backup(backup.folder), 2)
-        self.assertTrue(launcher.exists(), 'A conflicting shortcut may still need this launcher')
-        self.assertEqual(target.read_bytes(), b'user-changed-icon-still-targeting-proxy')
-
-    def test_concurrent_change_rejected_before_write_is_not_owned(self):
-        app = self.root / 'app'
-        menu = self.root / 'Start Menu'
-        app.mkdir()
-        programs = menu / 'Programs'
-        programs.mkdir(parents=True)
-        (app / 'Antigravity.exe').write_bytes(b'fake-executable')
-        (app / 'Antigravity-Proxy.cmd').write_bytes(TOOL.LAUNCHER_CMD.replace('\n', '\r\n').encode('ascii'))
-        (app / 'Antigravity-Proxy.ps1').write_bytes(TOOL.LAUNCHER_PS1.replace('\n', '\r\n').encode('utf-8-sig'))
-        target = programs / 'Antigravity.lnk'
-        target.write_bytes(b'original-link')
-
+    def test_change_after_scan_is_not_overwritten(self):
+        target = self.link()
         def bridge(request):
-            if request['action'] == 'folders':
-                return {'StartMenu': str(menu)}
+            result = self.bridge(request)
             if request['action'] == 'read':
-                return {'links': [{'path': str(target), 'target': str(app / 'Antigravity.exe'), 'arguments': '', 'snapshot_hash': TOOL.sha256(target.read_bytes())}], 'errors': []}
-            if request['action'] == 'write':
-                target.write_bytes(b'concurrent-user-edit')
-                raise RuntimeError('Shortcut changed since inspection; refusing to overwrite it.')
-            return {'notified': True}
+                target.write_bytes(b'changed-by-user')
+            return result
+        self.ps_mock.side_effect = bridge
+        with self.assertRaisesRegex(ValueError, '扫描后'):
+            TOOL.install(self.args())
+        self.assertEqual(target.read_bytes(), b'changed-by-user')
+        self.assertFalse((self.app / 'Antigravity-Proxy.cmd').exists())
 
-        args = type('Args', (), {'app_dir': str(app), 'scan_root': [], 'dry_run': False})()
-        with mock.patch.object(TOOL, 'run_powershell', side_effect=bridge):
-            self.assertEqual(TOOL.install(args), 2)
-        manifests = list((app / 'antigravity-proxy-backups').glob('*/manifest.json'))
-        self.assertEqual(len(manifests), 1)
-        manifest = json.loads(manifests[0].read_text(encoding='utf-8'))
-        entry = next(item for item in manifest['entries'] if item['path'] == str(target))
-        self.assertIsNone(entry['after_hash'], 'A rejected write must not claim ownership of concurrent user changes')
-
-    def test_change_after_scan_before_backup_is_not_overwritten(self):
-        app = self.root / 'app'
-        menu = self.root / 'Start Menu'
-        app.mkdir()
-        programs = menu / 'Programs'
-        programs.mkdir(parents=True)
-        (app / 'Antigravity.exe').write_bytes(b'fake-executable')
-        (app / 'Antigravity-Proxy.cmd').write_bytes(TOOL.LAUNCHER_CMD.replace('\n', '\r\n').encode('ascii'))
-        (app / 'Antigravity-Proxy.ps1').write_bytes(TOOL.LAUNCHER_PS1.replace('\n', '\r\n').encode('utf-8-sig'))
-        target = programs / 'Antigravity.lnk'
-        target.write_bytes(b'original-link')
-        write_calls = []
-
+    def test_concurrent_change_at_bridge_write_is_not_overwritten(self):
+        target = self.link()
         def bridge(request):
-            if request['action'] == 'folders':
-                return {'StartMenu': str(menu)}
-            if request['action'] == 'read':
-                snapshot_hash = TOOL.sha256(target.read_bytes())
-                target.write_bytes(b'changed-target-to-another-app')
-                return {'links': [{'path': str(target), 'target': str(app / 'Antigravity.exe'), 'arguments': '', 'snapshot_hash': snapshot_hash}], 'errors': []}
-            if request['action'] == 'write':
-                write_calls.append(request)
-                target.write_bytes(b'tool-overwrite')
-                return {'saved': str(target)}
-            return {'notified': True}
+            if request['action'] == 'write' and request['path'] == str(target):
+                target.write_bytes(b'changed-by-user')
+            return self.bridge(request)
+        self.ps_mock.side_effect = bridge
+        self.assertEqual(TOOL.install(self.args()), 2)
+        self.assertEqual(target.read_bytes(), b'changed-by-user')
+        self.assertFalse((self.app / 'antigravity-proxy-backups').exists())
 
-        args = type('Args', (), {'app_dir': str(app), 'scan_root': [], 'dry_run': False})()
-        with mock.patch.object(TOOL, 'run_powershell', side_effect=bridge):
-            self.assertEqual(TOOL.install(args), 2)
-        self.assertEqual(write_calls, [])
-        self.assertEqual(target.read_bytes(), b'changed-target-to-another-app')
+    def test_removed_restore_option_is_rejected(self):
+        before = self.inventory()
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as raised:
+            TOOL.main(['--restore', str(self.root)])
+        self.assertEqual(raised.exception.code, 2)
+        self.assertEqual(self.inventory(), before)
+
+
+@unittest.skipUnless(sys.platform == 'win32', 'Windows PowerShell integration')
+class NativeProxyTests(unittest.TestCase):
+    def test_native_proxy_resolution_and_persistent_policy_read(self):
+        # Run only resolver functions, never the launcher entry point or an app.
+        prefix = TOOL.LAUNCHER_PS1.split('\ntry {\n', 1)[0]
+        code = prefix + r"""
+$ProgressPreference = 'SilentlyContinue'
+[Console]::InputEncoding = New-Object System.Text.UTF8Encoding($false)
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
+$cases = [Console]::In.ReadToEnd() | ConvertFrom-Json
+$results = @()
+foreach ($case in $cases) {
+    try {
+        $configuration = Resolve-AntigravitySystemProxy -Enabled $case.enabled -Server $case.server -PacUrl $case.pac
+        $results += @{ name = $case.name; mode = $configuration.Mode; http = $configuration.HTTP_PROXY; https = $configuration.HTTPS_PROXY; rejected = $false }
+    } catch { $results += @{ name = $case.name; rejected = $true } }
+}
+$results | ConvertTo-Json -Compress
+"""
+        cases = [
+            dict(name='mixed', enabled=True, server='127.0.0.1:10808', pac=''),
+            dict(name='split', enabled=True, server='http=127.0.0.1:8000;https=127.0.0.1:8001', pac=''),
+            dict(name='ipv6', enabled=True, server='http://[::1]:10808', pac=''),
+            dict(name='disabled', enabled=False, server='', pac=''),
+            dict(name='PAC', enabled=False, server='', pac='http://local/proxy.pac'),
+            dict(name='SOCKS', enabled=True, server='socks=127.0.0.1:1080', pac=''),
+        ]
+        encoded = base64.b64encode(code.encode('utf-16-le')).decode('ascii')
+        result = subprocess.run([str(TOOL.powershell_path()), '-NoLogo', '-NoProfile', '-NonInteractive',
+                                 '-EncodedCommand', encoded],
+                                input=json.dumps(cases).encode('utf-8'), capture_output=True, timeout=30,
+                                creationflags=subprocess.CREATE_NO_WINDOW)
+        self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
+        values = {item['name']: item for item in json.loads(result.stdout.decode('utf-8-sig'))}
+        self.assertEqual(values['mixed']['https'], 'http://127.0.0.1:10808')
+        self.assertEqual(values['split']['http'], 'http://127.0.0.1:8000')
+        self.assertEqual(values['split']['https'], 'http://127.0.0.1:8001')
+        ipv6 = urlsplit(values['ipv6']['https'])
+        self.assertEqual(ipaddress.ip_address(ipv6.hostname), ipaddress.ip_address('::1'))
+        self.assertEqual(ipv6.port, 10808)
+        self.assertEqual(values['disabled']['mode'], 'DirectOrTun')
+        self.assertEqual(values['disabled']['https'], '')
+        self.assertTrue(values['PAC']['rejected'])
+        self.assertTrue(values['SOCKS']['rejected'])
+        policy = TOOL.run_powershell({'action': 'policy'})
+        self.assertIn(policy['effective'], ('Restricted', 'AllSigned', 'RemoteSigned', 'Unrestricted', 'Bypass'))
+
 
 
 if __name__ == '__main__':

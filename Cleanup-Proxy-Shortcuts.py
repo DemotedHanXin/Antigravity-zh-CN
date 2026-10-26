@@ -105,7 +105,8 @@ def plan_cleanup(app_dir, extra_roots, setup):
     if not executable.is_file():
         raise ValueError('未找到 Antigravity.exe，不能将快捷方式改回源程序。')
     folders = setup.run_powershell({'action': 'folders'})
-    roots = setup.scan_roots(folders, extra_roots)
+    custom_roots = setup.validate_scan_roots(setup.read_launcher_scan_roots(app_dir) + list(extra_roots))
+    roots = setup.scan_roots(folders, custom_roots)
     links, errors, scanned = scan_proxy_links(roots, recorded, app_dir, setup)
     if errors:
         raise ValueError('快捷方式扫描不完整，未执行清理：\n' + '\n'.join(errors))
@@ -146,7 +147,7 @@ def plan_cleanup(app_dir, extra_roots, setup):
                 raise ValueError('代理启动文件不在预期安装目录内。')
             add(path, 'launcher')
     return {'app_dir': app_dir, 'entries': entries,
-            'roots': roots, 'recorded': recorded, 'scanned': scanned}
+            'roots': roots, 'custom_roots': custom_roots, 'recorded': recorded, 'scanned': scanned}
 
 
 def apply_cleanup(plan, setup):
@@ -154,11 +155,13 @@ def apply_cleanup(plan, setup):
         print('[完成] 没有找到代理启动文件或相关快捷方式，无需清理。')
         return 0
     # Check the whole snapshot before changing shortcuts or removing launchers.
+    setup.validate_scan_roots(plan['custom_roots'])
     for entry in plan['entries']:
         if digest(regular_bytes(entry['path'])) != entry['sha256']:
             raise ValueError('文件在预览后已变化，未开始修改或删除：' + entry['path'])
     for kind in ('shortcut', 'launcher'):
         if kind == 'launcher':
+            setup.validate_scan_roots(plan['custom_roots'])
             remaining, errors, _ = scan_proxy_links(plan['roots'], plan['recorded'], plan['app_dir'], setup)
             if remaining or errors:
                 print('[停止] 仍有代理快捷方式或扫描错误；启动文件已保留，请重新预览。')

@@ -1,290 +1,135 @@
 # Antigravity-zh-CN
 
-<div align="center">
+English | [简体中文](README.md)
 
-**🌏 English | [简体中文](README.md)**
+Chinese UI localization, restoration, and Windows proxy launcher / shortcut management for Antigravity Desktop. Runtime scripts use the Python standard library; no pip packages are required.
 
-An open-source Chinese localization patch for Google Antigravity Desktop
+This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN). Translation rules target the v2.21.1 layout; text coverage and compatibility with other versions are not guaranteed. These changes apply to **the Python source in this repository**. Previously published executables need rebuilding to include them.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
+## New features and repairs
 
-</div>
+- Validate ASAR structure, paths, application entry points and external files from `app.asar.unpacked`. Extract and translate in a staging directory before switching the installed code.
+- Refuse restoration without a valid original archive, keeping a potentially sole working `resources/app`. Report deletion failures instead of silently claiming success.
+- Select custom installations with `--app-dir`; multiple detected installations require an explicit selection.
+- Create proxy CMD/PowerShell launchers and retarget matching `.lnk` files while retaining arguments, icons and working directories.
+- Create no permanent proxy backups or recovery archives. Custom scan roots are stored as comment metadata inside the existing `.ps1` file.
+- Cleanup preserves shortcuts, retargets them to the EXE, then directly deletes the two launchers. Rerun Setup to enable proxy launching again.
+- Check PowerShell execution policy before deployment without changing or bypassing it. Try a personal Start Menu fallback when shared shortcuts cannot be updated, while reporting unresolved items.
 
----
+See [Project status and code guide](PROJECT_STATUS.md) (Chinese) for the implementation and validation scope.
 
-## 📖 Project Overview
+## Requirements and setup
 
-**Antigravity v2.21.1 Chinese Localization Patch** - Provides complete Chinese interface support for Google Antigravity desktop application.
+| Function | Environment |
+| --- | --- |
+| Localization / restoration | Python 3.8+; Windows and macOS path / process branches |
+| Proxy and shortcuts | Windows, Python 3.8+, built-in Windows PowerShell and WScript.Shell |
+| Validation for this revision | Windows with Python 3.11; native macOS and other app versions still need validation |
 
-## ✨ Key Features
+Download the complete repository. Keep `antigravity_common.py` beside `Antigravity-Patcher.py` and `Restore.py`. Keep `Setup-Proxy-Shortcuts.py` beside `Cleanup-Proxy-Shortcuts.py`.
 
-- 🚀 **Zero Dependencies** - Built-in pure Python ASAR parser and packer using only `struct` and `json` libraries, no Node.js or npm required
-- 🎯 **Smart Text Matching** - Uses low-level `indexOf` fragmentation reconstruction and CSS pseudo-class polymorphic matching to bypass Webpack code splitting issues
-- ⚡ **One-Click Deployment** - Automatically handles process cleanup and software restart for a seamless "press Enter → enjoy Chinese" experience
-- 🛡️ **Clean & Reversible** - Complete removal of localization with restore script, ensuring "lossless rollback" to official English version at any time
-- 🧭 **Cross-Platform Compatibility** - Automatically detects OS environment, natively supporting path resolution and process management on both Windows and macOS
-
-## 📦 Download & Installation
-
-### Option 1: Standalone Version (Windows / macOS) ⭐ Recommended for Most Users
-
-**Download:** [Download your OS version from Releases](https://github.com/MIMICTE/Antigravity-zh-CN/releases/latest) (Supports Windows x64, macOS Intel/Apple Silicon)
-
-**Features:**
-- ✅ Ready to use, **no Python environment required**
-- ✅ Native experience, one-click execution with automatic app restart
-
-**【For Windows Users】**
-1. Download `Antigravity-zh-CN-v2.21.1-windows-x64.zip` and extract
-2. Double-click `Antigravity-Patcher.exe` to apply the patch (Use `Restore.exe` to revert)
-
-**【For macOS Users】**
-1. Download the corresponding macOS archive (`arm64` for M-series Apple Silicon, `x86_64` for Intel) and extract
-2. Open Terminal, navigate to the extracted folder, grant execution permissions and run:
-   ```bash
-   chmod +x Antigravity-Patcher-macOS-*
-   ./Antigravity-Patcher-macOS-*
-   ```
-> 🍎 **macOS Note**: If blocked by Gatekeeper ("cannot be opened because the developer cannot be verified"), go to "System Settings -> Privacy & Security", scroll down and click "Open Anyway". Alternatively, run `xattr -cr Antigravity-Patcher-macOS-*` in Terminal to clear attributes.
-
----
-
-### Option 2: Install from Source ⭐ Recommended for Developers
-
-**Clone the repository:**
-```bash
-git clone https://github.com/MIMICTE/Antigravity-zh-CN.git
+```powershell
+git clone https://github.com/DemotedHanXin/Antigravity-zh-CN.git
 cd Antigravity-zh-CN
+python --version
+```
+
+Save your work first. Localization and restoration stop the target application before switching files. `--no-launch` suppresses only the subsequent automatic launch. Proxy Setup/Cleanup do not stop running applications.
+
+## Apply and remove localization
+
+```powershell
 python Antigravity-Patcher.py
+python Antigravity-Patcher.py --app-dir "D:\Apps\Antigravity" --no-launch
+python Restore.py --app-dir "D:\Apps\Antigravity" --no-launch
 ```
 
-**Or download source code archive:**
+On macOS, use `python3` and select the entire app bundle:
 
-Download `Source code (zip)` or `Source code (tar.gz)` from [Releases page](https://github.com/MIMICTE/Antigravity-zh-CN/releases/latest), extract and run `Antigravity-Patcher.py`.
-
-### Windows Proxy Shortcut Repair
-
-If Antigravity remains on the loading screen while the Windows system proxy is enabled, run the standalone, single-file [Setup-Proxy-Shortcuts.py](Setup-Proxy-Shortcuts.py). It uses the Python standard library and built-in Windows PowerShell, with **no pip dependencies**:
-
-```powershell
-python Setup-Proxy-Shortcuts.py
+```bash
+python3 Antigravity-Patcher.py --app-dir "/Applications/Antigravity.app" --no-launch
+python3 Restore.py --app-dir "/Applications/Antigravity.app" --no-launch
 ```
 
-The script deploys `Antigravity-Proxy.cmd` and `Antigravity-Proxy.ps1` into the app installation directory. It scans `.lnk` files in the current-user and shared Desktop, Start Menu and Startup folders, plus Quick Launch / taskbar folders, and repairs matching Antigravity shortcuts while preserving their original arguments. It backs up files before changes and prints the backup directory and restore command. Each subsequent launch through a repaired shortcut reads the current Windows system proxy and applies it only to the app process; disabling the system proxy clears inherited proxy variables.
+Localization renames the original `resources/app.asar` to `app.asar.disabled` and installs the translated `resources/app`. **The `.disabled` file is the original archive needed for restoration, not leftover proxy backup data. Keep it.** Also retain the official `app.asar.unpacked` dependencies.
 
-Common options:
+If both archive names exist, the tools stop rather than mixing an updated archive with older files. They also stop if a valid original archive is unavailable. Repair the official installation in that situation; deleting `resources/app` does not repair missing application code.
+
+## Windows proxy launcher setup
+
+Use this when your proxy client has enabled the **Windows system proxy with an HTTP / mixed port**, but Antigravity does not inherit the needed proxy environment.
 
 ```powershell
-# Preview without changing files
+# Preview
 python Setup-Proxy-Shortcuts.py --dry-run
-# Select the directory containing Antigravity.exe and scan additional folders
+
+# Deploy launchers and configure shortcuts
+python Setup-Proxy-Shortcuts.py
+
+# Custom installation and additional shortcut locations
 python Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts" --scan-root "E:\Launchers"
-# Replace BACKUP with the full backup directory printed by the script
-python Setup-Proxy-Shortcuts.py --restore "BACKUP"
 ```
 
-- Repeat `--scan-root` for custom shortcut directories. Some Windows pinned items are not stored as `.lnk` files and cannot be repaired directly by this script.
-- PAC scripts are unsupported and produce an explicit error. Use a system proxy with an HTTP / mixed port, or disable the Windows proxy script setting when using TUN.
-- The script does not restart a running app. Fully exit Antigravity, then launch it through a repaired shortcut for the settings to take effect.
-- Run as a regular user first. Administrator access is only needed if shared folders, such as the public Desktop or Start Menu, report insufficient permissions.
+Setup scans current-user and shared Desktop, Start Menu and Startup folders, plus Quick Launch / taskbar `.lnk` files. It matches the destination within the selected installation, not the shortcut name. It creates a personal Start Menu entry when no usable matching entry is available and reports shared shortcuts it cannot update.
 
-### Remove proxy launchers and restore EXE shortcuts
+Each launch reads the current Windows system proxy and supplies `HTTP_PROXY`, `HTTPS_PROXY` and related variables to the application process. No username, installation drive or proxy port is hardcoded, and Windows global proxy settings are not changed.
 
-Keep [Cleanup-Proxy-Shortcuts.py](Cleanup-Proxy-Shortcuts.py) beside `Setup-Proxy-Shortcuts.py`. It removes the proxy launch setup while retaining application shortcuts. No additional packages are required.
+Fully exit Antigravity and launch it again through a repaired shortcut after setup. Existing processes do not acquire new environment variables.
+
+### Cleanup and EXE shortcuts
 
 ```powershell
 python Cleanup-Proxy-Shortcuts.py --dry-run
 python Cleanup-Proxy-Shortcuts.py
-# Recreate proxy launchers and configure shortcuts when needed again:
+
+# Older launchers may need their original custom roots specified again
+python Cleanup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts"
+
+# Recreate the proxy launch setup later
 python Setup-Proxy-Shortcuts.py
 ```
 
-Cleanup **keeps each scanned `.lnk` targeting `Antigravity-Proxy.cmd` or `Antigravity-Proxy.ps1` and redirects it to `Antigravity.exe` in the same installation directory**. It decodes the original application arguments, preserves the icon and working directory, and restores normal window display. Only after all matching shortcuts have been handled does it delete the two installed proxy launcher files. Direct EXE shortcuts, other applications and the old `antigravity-proxy-backups` directory are preserved. Use `--app-dir` or repeat `--scan-root` for custom locations; recorded shortcut paths in setup backups are also checked. Unrecognized launcher arguments cause an error and are left unchanged.
+Cleanup keeps matching `.lnk` files, retargets them to `Antigravity.exe`, decodes the original arguments and retains icons / working directories. It deletes `Antigravity-Proxy.cmd` and `Antigravity-Proxy.ps1` only after all scanned proxy shortcuts have been handled.
 
-Cleanup deletes files directly without using the Recycle Bin. **It creates no backups, archives, logs or recovery files**, and no longer supports `--backup-dir` or `--restore`. To enable proxy launching again, rerun `Setup-Proxy-Shortcuts.py` to recreate the launchers and configure shortcuts. File checks are performed in memory; changed files or shortcut failures stop subsequent operations. Historical backups already on disk are not automatically deleted. Application files, localization, global proxy settings and running processes are left untouched. The EXE shortcuts no longer inject proxy settings. Windows pins that are not stored as `.lnk` files are outside this script's scope.
+Both proxy tools create **no permanent backups, logs or recovery archives** and no longer support `--restore` / `--backup-dir`. Deletion goes directly through the filesystem, not the Recycle Bin. Previously created backup directories are not automatically removed.
 
-## 💡 Technical Approach
+New Setup versions store custom scan roots in a comment inside the existing PS1. Cleanup reads that metadata, without another record file. If an older launcher has no metadata and its old backups are gone, provide the previous `--scan-root` values again. Missing or inaccessible explicit / recorded roots cause an error so cleanup does not silently skip them and remove the launchers.
 
-This project leverages Electron framework mechanisms:
+## Troubleshooting and limits
 
-### 1. Unpacked Patching
-Disables the official `app.asar` file, forcing the software to read from the unpacked `app` folder with injected localization code.
+| Situation | Action |
+| --- | --- |
+| Missing or multiple installations | Select the EXE directory with `--app-dir`, or the `.app` bundle on macOS |
+| Invalid / missing archive or both archive names present | Preserve current files and repair the official installation |
+| PowerShell scripts blocked or signatures required | Setup stops before changes; follow the computer or organization's permitted policy process. The tool does not relax it |
+| Access denied for shared shortcuts or Program Files | Check the reported paths and use appropriate write permissions. A personal entry may be created as a fallback |
+| Custom scan root unavailable | Correct the path or reconnect the drive before retrying |
+| Shortcut changed during processing | Re-preview and retry rather than overwriting concurrent edits |
+| Duplicate taskbar icons or stale pinned entries | CMD entry points and app windows may group differently; Windows pin caches may need repinning. Non-`.lnk` pins are outside this tool's scope |
 
-### 2. Dynamic DOM Interception
-Injects `MutationObserver` in `preload.js` to monitor DOM changes in real-time and replace English text with Chinese.
+- PAC scripts and standard `socks=...`-only system proxy settings are unsupported; use HTTP / mixed ports.
+- When the Windows system proxy is off, the launcher uses direct / TUN behavior and clears inherited proxy variables. Environment-only proxy configurations are outside this design.
+- The tools do not test proxy service availability, port connectivity, account status or destination reachability.
+- Shortcuts moved outside known locations require `--scan-root`. Discovery does not cover arbitrary locations, other user accounts or every Windows pin type.
+- Failure of automatic launch is reported separately from the file changes. Use `--no-launch` for file operations only.
+- Translation depends on the application's file layout. Other versions and native macOS operation still require validation; complete translation of dynamic content or model output is not promised.
 
-### 3. Native ASAR Parser
-Pure Python implementation of ASAR file format parser with zero external dependencies.
+## Tests and code guide
 
-## ⚠️ Known Limitations
-
-- **Thought Process in English** - Due to AI model's streaming output architecture, the agent's backend thinking logs (`Thought` process) cannot be localized, but all final responses and frontend UI elements are 100% localized
-- **Platform Support** - Fully supports Windows and macOS (Intel & Apple Silicon). Linux is currently not supported
-- **Version Specific** - Deeply optimized for Antigravity v2.21.1 with robust compatibility across versions
-
-## 📸 Screenshots
-
-<div align="center">
-
-![Antigravity Chinese Interface](antigravity-chinese.png)
-
-*Antigravity with Chinese interface - All text fully localized*
-
-</div>
-
-**Fully localized interface includes:**
-- ✅ Sidebar menu (New conversation, History, Scheduled tasks, Projects)
-- ✅ Top navigation bar (File, Audio, Window)
-- ✅ Input placeholder text and model selector
-- ✅ All options and descriptions in Settings page
-- ✅ Underlying terminal permission request prompts and dynamic status text
-
-> 💡 Tip: To see the actual result, simply double-click `Antigravity-Patcher.exe` or `Antigravity-Patcher.py` to experience the complete Chinese interface!
-
-## 🔐 Security
-
-This project is completely open-source and secure:
-
-### ✅ What We Do
-
-- **UI Text Only** - Only replaces display text at the frontend level, no network interception, data collection, or account access
-- **Open Source** - All code is fully open-source with no obfuscation, encryption, or hidden logic
-- **Reversible** - Complete restore mechanism, one-click rollback to original version
-- **Zero External Dependencies** - Pure Python standard library implementation, no external server connections
-
-### 🛡️ How It Works
-
-1. **ASAR Unpacking** - Pure Python parser for Electron's ASAR package format
-2. **Code Injection** - Append translation code to `preload.js` and `menu.js`
-3. **DOM Monitoring** - Use `MutationObserver` to watch page changes
-4. **Text Replacement** - Dictionary-based English to Chinese text replacement
-
-### About the Standalone Executables (Windows .exe / macOS binaries)
-
-- Packaged using [PyInstaller](https://pyinstaller.org/) open-source tool
-- Contains complete Python runtime environment (hence file size ~8 MB)
-- May be flagged by some antivirus software on Windows, which is a known PyInstaller issue
-- macOS may show "cannot be opened because the developer cannot be verified" due to lack of paid Apple Developer signature
-- If you have security concerns, use the "Install from Source" method (completely transparent code)
-
-No reverse engineering or cracking involved.
-
-## ❓ FAQ
-
-<details>
-<summary><b>Q: macOS version shows "cannot be opened because the developer cannot be verified"?</b></summary>
-
-A: This is triggered by macOS Gatekeeper (because this open-source tool is not signed with a paid Apple Developer certificate). To fix this:
-1. Option 1: Go to "System Settings -> Privacy & Security", scroll down and click "Open Anyway".
-2. Option 2: Run `xattr -cr /path/to/downloaded/file` in Terminal to clear quarantine attributes.
-</details>
-
-<details>
-<summary><b>Q: What's the difference between Python script and standalone versions?</b></summary>
-
-A: 
-- **Python script version**: Requires Python environment, small size, transparent code
-- **Standalone version**: No Python needed, ready to use, but larger file size and may trigger false positives
-
-Both versions have identical functionality. Choose based on your needs.
-</details>
-
-<details>
-<summary><b>Q: Why is the .exe file so large?</b></summary>
-
-A: The .exe file includes the complete Python runtime environment, so ~8 MB is normal.
-</details>
-
-<details>
-<summary><b>Q: Antivirus flagging as virus?</b></summary>
-
-A: This is a known PyInstaller issue, not an actual virus. You can:
-- Add to antivirus whitelist
-- Use Python script version instead (recommended)
-- Upload to [VirusTotal](https://www.virustotal.com/) for verification
-</details>
-
-<details>
-<summary><b>Q: "Python is not recognized as an internal or external command"?</b></summary>
-
-A: Python is not added to your system PATH. Reinstall Python and make sure to check "Add Python to PATH" during installation, or use the standalone `.exe` version instead.
-</details>
-
-<details>
-<summary><b>Q: Why does Antigravity sometimes open without a visible UI? Is the software broken by the script?</b></summary>
-
-A: Usually, this is not caused by the script, but by Electron's background process mechanics:
-1. The app might have started minimized to the **System Tray**. Check your tray icon (often a black `^` icon) and double-click it to bring up the window.
-2. There might be a "zombie" `Antigravity.exe` background process left in the Task Manager. Press `Ctrl+Shift+Esc` to end all Antigravity processes in the Task Manager and try opening it again.
-3. If it's a completely blank screen, your antivirus might have quarantined essential unpacked code files. Run `Restore.exe` to revert to the official version, temporarily disable the antivirus, and re-run the patcher to revive it.
-</details>
-
-<details>
-<summary><b>Q: Can I still use this localization patch when the official Antigravity app updates?</b></summary>
-
-A: **Absolutely!** 
-Starting from v2.21.1, the script features an **OTA Smart Compatibility Mechanism**. When the official app updates, it releases new core files, and the localization will naturally temporarily revert to English. Simply **re-run the patcher**, and it will automatically detect the new version, clear the old unpacked cache, and re-extract and inject the localization into the latest official code. It is fully forward-compatible!
-</details>
-
-<details>
-<summary><b>Q: Does this patch affect software security?</b></summary>
-
-A: No. This patch only modifies UI text display and does not involve network communication, data encryption, account authentication, or core functionality. All changes are at the frontend level and do not affect communication with servers.
-</details>
-
-<details>
-<summary><b>Q: How to add new translations?</b></summary>
-
-A: Edit the `dictionary` in `Antigravity-Patcher.py` and add key-value pairs:
-```python
-"English Text": "中文翻译",
+```powershell
+python -B -m unittest discover -s tests -v
 ```
-Then re-run the patch script.
-</details>
 
-<details>
-<summary><b>Q: Does it support other operating systems?</b></summary>
+Tests use isolated directories and mocked process control. They cover archive validation, external dependencies, localization / restore failure handling, shortcut arguments, scan roots and backup-free proxy operations. Do not run mutation tests against a working installation.
 
-A: Currently Windows only. macOS and Linux versions have different paths and mechanisms that require separate adaptation.
-</details>
+See [PROJECT_STATUS.md](PROJECT_STATUS.md) for module responsibilities, file states and maintenance notes.
 
-More questions? Welcome to ask in [GitHub Issues](../../issues) or [Discussions](../../discussions)!
+## Screenshot
 
-## 🤝 Contributing
+![Antigravity Chinese UI example](antigravity-chinese.png)
 
-Issues and Pull Requests are welcome!
+This example does not imply complete translation of every version or generated content. Add translations to the dictionary in `Antigravity-Patcher.py`, then reapply the patch.
 
-- Found translation errors or omissions? Submit an [Issue](../../issues) or PR
-- Have better technical solutions? Discuss in [Discussions](../../discussions)
+## Contributing and license
 
-For detailed contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md)
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
-
-## ⚠️ Disclaimer
-
-- This project is for educational purposes only
-- Users are responsible for any issues arising from using this patch
-- Please use official licensed Antigravity software
-- Please comply with Antigravity's Terms of Service
-
-## 🌟 Star History
-
-If this project helps you, please consider giving it a star ⭐️
-
-## 📧 Contact
-
-- Issues: [GitHub Issues](../../issues)
-- Discussions: [GitHub Discussions](../../discussions)
-
----
-
-<div align="center">
-
-**Made with ❤️ by Antigravity-zh-CN Contributors**
-
-</div>
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [MIT License](LICENSE). Report issues in [this fork](https://github.com/DemotedHanXin/Antigravity-zh-CN/issues). Original project: [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN).

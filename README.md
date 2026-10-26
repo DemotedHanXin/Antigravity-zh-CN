@@ -1,292 +1,140 @@
 # Antigravity-zh-CN
 
-<div align="center">
+[English](README_EN.md) | 简体中文
 
-**🌏 [English](README_EN.md) | 简体中文**
+为 Antigravity 桌面端提供中文界面补丁、汉化还原，以及 Windows 代理启动与快捷方式管理。运行脚本使用 Python 标准库，不需要安装 pip 依赖。
 
-一个为 Google Antigravity 桌面端提供完整中文界面的开源汉化补丁
+本分支基于 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN) 扩展。翻译规则以 v2.21.1 的文件结构为基础，不保证所有版本的文本覆盖率。本次修复针对仓库中的 **Python 源码**；旧版 Release 中的可执行程序需要重新打包后才包含这些修复。
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
+## 本次新增与修复
 
-</div>
+- **汉化前验证安装完整性**：检查 ASAR 结构、文件路径和应用入口，补齐 `app.asar.unpacked` 中的外置依赖；先在临时目录完成解包与注入，验证通过后才切换。
+- **保护可运行代码**：缺少或损坏原版归档时停止还原，不再把唯一的 `resources/app` 删除；目录删除失败会报告错误，不再静默提示成功。
+- **自定义安装目录**：汉化、还原和代理工具均支持 `--app-dir`。发现多个安装时要求明确选择，不猜测目标。
+- **代理启动器与快捷方式修复**：生成 `.cmd`、`.ps1`，修改匹配的 `.lnk`，保留原始启动参数、图标和工作目录。
+- **不新增代理备份**：Setup 和 Cleanup 不再生成备份目录、归档或还原记录；自定义扫描目录记录在现有 `.ps1` 的注释中。
+- **清理保留快捷方式**：先将匹配入口改回 EXE，再直接删除两个代理启动文件；需要代理时重新运行 Setup。
+- **启动条件检查**：代理配置前检查 PowerShell 执行策略；不修改全局策略，也不绕过组织策略。公共开始菜单写入失败时，尝试创建个人入口并报告未处理项。
 
----
+实现细节、状态转换、文件用途和验证范围见 [项目状态与代码说明](PROJECT_STATUS.md)。
 
-## 📖 项目简介
+## 运行条件与准备
 
-**Antigravity v2.21.1 一键汉化补丁** - 为 Google Antigravity 桌面端提供完整的中文界面支持。
+| 功能 | 环境 |
+| --- | --- |
+| 汉化、还原 | Python 3.8+；Windows 或 macOS 的路径与进程处理分支 |
+| 代理启动与快捷方式 | Windows、Python 3.8+、系统自带 Windows PowerShell 与 WScript.Shell |
+| 本次验证环境 | Windows、Python 3.11；macOS 和其他 Antigravity 版本仍需实际验证 |
 
-## ✨ 核心特性
+下载完整仓库，保留脚本依赖：`Antigravity-Patcher.py`、`Restore.py` 依赖同目录的 `antigravity_common.py`；`Cleanup-Proxy-Shortcuts.py` 依赖同目录的 `Setup-Proxy-Shortcuts.py`。
 
-- 🚀 **零依赖 (Zero Dependencies)** - 自带纯原生 Python 编写的 ASAR 解析与打包算法，无需安装 Node.js，无需 npm，无需 `asar` 命令行工具
-- 🎯 **智能文本匹配** - 采用底层 `indexOf` 碎片化重组与 CSS 伪类多态匹配策略，完美绕过 Webpack 代码分割导致的汉化失效问题
-- ⚡ **一键部署** - 执行补丁后自动清理进程并重启软件，实现"敲下回车 → 享受中文"的无缝体验
-- 🛡️ **纯净可逆** - 还原脚本可彻底抹除所有汉化残留，确保随时能"无损回滚"至纯血官方英文版
-- 🧭 **全动态跨平台寻址** - 智能识别系统架构，原生支持 Windows 及 macOS 环境下的路径寻址与进程管理
-
-## 📦 下载与安装
-
-### 方式一：独立免安装版 (Windows / macOS) ⭐ 推荐普通用户
-
-**下载：** [前往 Release 下载对应系统版本](https://github.com/MIMICTE/Antigravity-zh-CN/releases/latest) (支持 Windows x64, macOS Intel/M芯片)
-
-**特点：**
-- ✅ 开箱即用，**无需安装 Python** 环境
-- ✅ 原生级体验，一键执行，自动识别路径并重启
-
-**【Windows 用户使用方法】**
-1. 下载 `Antigravity-zh-CN-v2.21.1-windows-x64.zip` 并解压
-2. 双击运行 `Antigravity-Patcher.exe` 开始汉化 (还原请双击 `Restore.exe`)
-
-**【macOS 用户使用方法】**
-1. 下载对应的 macOS 压缩包（`arm64`为M系列芯片，`x86_64`为Intel芯片）并解压
-2. 打开终端 (Terminal)，进入解压目录，赋予执行权限并运行：
-   ```bash
-   chmod +x Antigravity-Patcher-macOS-*
-   ./Antigravity-Patcher-macOS-*
-   ```
-> 🍎 **Mac 用户注意**：若系统提示“无法打开，因为无法验证开发者”，请前往「系统设置 -> 隐私与安全性」，向下滑动并点击「仍要打开」。或者在终端执行 `xattr -cr Antigravity-Patcher-macOS-*` 即可解除限制。
-
----
-
-### 方式二：从源码安装 ⭐ 推荐开发者
-
-**克隆仓库：**
-```bash
-git clone https://github.com/MIMICTE/Antigravity-zh-CN.git
+```powershell
+git clone https://github.com/DemotedHanXin/Antigravity-zh-CN.git
 cd Antigravity-zh-CN
+python --version
+```
+
+请先保存 Antigravity 中的工作。汉化和还原会关闭目标应用以切换安装文件；`--no-launch` 只禁止完成后的自动启动。代理 Setup/Cleanup 不结束正在运行的软件。
+
+## 汉化与还原
+
+```powershell
+# 自动查找安装目录并汉化
 python Antigravity-Patcher.py
+
+# 指定包含 Antigravity.exe 的目录；完成后不自动启动
+python Antigravity-Patcher.py --app-dir "D:\Apps\Antigravity" --no-launch
+
+# 恢复英文原版；自定义安装使用同一个目录
+python Restore.py --app-dir "D:\Apps\Antigravity" --no-launch
 ```
 
-**或下载源码压缩包：**
+macOS 使用 `python3`，`--app-dir` 指向整个 `.app`，例如：
 
-从 [Releases 页面](https://github.com/MIMICTE/Antigravity-zh-CN/releases/latest) 下载 `Source code (zip)` 或 `Source code (tar.gz)`，解压后运行 `Antigravity-Patcher.py`。
-
-### Windows 代理快捷方式修复
-
-如果 Windows 系统代理已开启，但 Antigravity 启动后卡在加载界面，可运行独立的单文件脚本 [Setup-Proxy-Shortcuts.py](Setup-Proxy-Shortcuts.py)。它使用 Python 标准库和 Windows 自带的 PowerShell，**无需安装 pip 依赖**：
-
-```powershell
-python Setup-Proxy-Shortcuts.py
+```bash
+python3 Antigravity-Patcher.py --app-dir "/Applications/Antigravity.app" --no-launch
+python3 Restore.py --app-dir "/Applications/Antigravity.app" --no-launch
 ```
 
-脚本会在软件安装目录部署 `Antigravity-Proxy.cmd` 和 `Antigravity-Proxy.ps1`，扫描当前用户及公共桌面、开始菜单、启动项目，以及 Quick Launch / 任务栏目录中的 `.lnk`，修复匹配的 Antigravity 快捷方式并保留原有启动参数。改动前会备份文件，完成后输出备份目录及还原命令。之后每次通过修复后的快捷方式启动，都会读取当时的 Windows 系统代理，仅为本次软件进程配置代理；关闭系统代理时会清除继承的代理变量。
+汉化会将原版 `resources/app.asar` 改名保留为 `app.asar.disabled`，并生成汉化后的 `resources/app`。**`.disabled` 是恢复原版所需的原始归档，不是代理备份残留，请勿手动删除。** `app.asar.unpacked` 是官方运行依赖，也应保留。
 
-常用选项：
+如果同时存在 `app.asar` 和 `app.asar.disabled`，工具会停止，避免把更新后的归档与旧版代码混用。缺少有效原版归档时也会停止；此时应通过官方安装程序修复安装，不能依靠删除 `resources/app` 修好。
+
+## Windows 代理启动修复
+
+适用于代理软件已开启 **Windows 系统代理的 HTTP／混合端口**，但 Antigravity 没有继承所需代理环境的情况。
 
 ```powershell
-# 只预览，不修改文件
+# 查看将处理的安装与快捷方式
 python Setup-Proxy-Shortcuts.py --dry-run
-# 指定包含 Antigravity.exe 的安装目录，并额外扫描多个自定义目录
+
+# 创建启动器并修改快捷方式
+python Setup-Proxy-Shortcuts.py
+
+# 自定义安装与快捷方式目录；--scan-root 可以重复使用
 python Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts" --scan-root "E:\Launchers"
-# 将 BACKUP 替换为脚本输出的完整备份目录
-python Setup-Proxy-Shortcuts.py --restore "BACKUP"
 ```
 
-- `--scan-root` 可重复使用。部分 Windows 固定项不以 `.lnk` 保存，无法由此脚本直接修复；自定义快捷方式目录需要用此选项补充。
-- 不支持 PAC 自动代理脚本，检测到后会明确报错；请使用 HTTP / 混合端口的系统代理，或关闭 Windows 代理脚本后使用 TUN。
-- 脚本不会重启正在运行的软件；请完全退出 Antigravity，再从修复后的快捷方式启动，使设置生效。
-- 默认以普通用户运行；仅在公共桌面、公共开始菜单等共享目录提示权限不足时，再以管理员身份运行。
+脚本扫描当前用户和公共桌面、开始菜单、启动项及 Quick Launch／任务栏中的 `.lnk`，只处理指向所选安装的快捷方式。没有可用开始菜单入口时，会创建个人入口；权限不足的共享入口仍会单独报告。名称相似的其他软件不会被当作 Antigravity。
 
-### 移除代理启动器并恢复 EXE 快捷方式
+每次通过修复后的快捷方式启动，会读取当时的 Windows 系统代理，将 `HTTP_PROXY`、`HTTPS_PROXY` 等变量设置到本次进程中，再启动同目录的 EXE。不会固定使用某个用户名、安装盘符或代理端口，也不会修改 Windows 全局代理设置。
 
-运行 [Cleanup-Proxy-Shortcuts.py](Cleanup-Proxy-Shortcuts.py) 可退出代理启动方案，同时保留应用快捷方式。请将它与 `Setup-Proxy-Shortcuts.py` 放在同一目录，无需额外安装依赖。
+配置完成后，请完全退出 Antigravity，再通过修复后的快捷方式启动。运行中的旧进程不会自动获得新环境变量。
+
+### 清理并改回 EXE 启动
 
 ```powershell
-# 先预览将改回 EXE 的快捷方式和待删除的启动文件
 python Cleanup-Proxy-Shortcuts.py --dry-run
-# 执行清理
 python Cleanup-Proxy-Shortcuts.py
-# 以后需要代理启动时，重新创建启动文件并配置快捷方式
+
+# 旧版启动器没有扫描目录记录时，需要再次提供 --scan-root
+python Cleanup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts"
+
+# 以后重新启用代理启动
 python Setup-Proxy-Shortcuts.py
 ```
 
-脚本将所有扫描到的、直接指向 `Antigravity-Proxy.cmd` 或 `Antigravity-Proxy.ps1` 的 `.lnk` **保留并改回同一安装目录中的 `Antigravity.exe`**，恢复编码前的原始启动参数、保留图标和工作目录，并改为正常显示窗口。只有在相关快捷方式全部处理成功后，才删除安装目录里的这两个代理启动文件。原有 EXE 快捷方式、其他软件入口和 `antigravity-proxy-backups` 旧修复备份均保留。支持 `--app-dir` 和可重复的 `--scan-root`，也会检查旧修复记录中的自定义快捷方式；不识别的启动器参数会报错并保留原状。
+清理会保留 `.lnk`，将目标改回 `Antigravity.exe`，恢复编码前的启动参数并保留图标、工作目录。所有已扫描的代理入口处理成功后，才删除安装目录下的 `Antigravity-Proxy.cmd` 和 `Antigravity-Proxy.ps1`。
 
-清理脚本使用直接删除，不进入回收站，**不创建备份、归档、日志或还原文件**，也不再提供 `--backup-dir` 和 `--restore`。以后需要代理启动时，只需重新运行 `Setup-Proxy-Shortcuts.py` 创建启动文件并配置快捷方式。脚本只在内存中校验待处理文件，若文件发生变化或快捷方式处理失败，会停止后续操作。此前已经存在的历史备份不会自动删除。脚本不会修改软件本体、汉化文件或全局代理，也不会结束正在运行的软件。清理后的快捷方式直接启动 EXE，不再自动注入代理。部分 Windows 固定项不是 `.lnk`，不属于脚本处理范围。
+两个代理脚本均**不创建永久备份、日志或恢复归档**，不再支持 `--restore`／`--backup-dir`。删除使用文件系统直接删除，不进入回收站。历史版本已经生成的备份不会自动删除，也不会作为新的备份继续累积。
 
-## 💡 技术原理
+新版 Setup 把自定义扫描目录写入 `.ps1` 的注释元数据，Cleanup 可自动读回；不额外创建记录文件。旧版启动器没有这项记录，若旧备份也已删除，需在清理时补充原来的 `--scan-root`。显式指定或记录的目录不可访问时会停止，避免漏改快捷方式后删除启动器。
 
-本项目利用 Electron 框架机制实现汉化：
+## 故障提示与适用范围
 
-### 1. 免打包劫持 (Unpacked Patching)
-禁用官方 `app.asar` 文件，迫使软件读取注入了汉化代码的解包 `app` 文件夹。
+| 情况 | 处理方式 |
+| --- | --- |
+| 找不到安装或发现多个安装 | 用 `--app-dir` 指定 EXE 所在目录；macOS 指定 `.app` |
+| 缺少归档、归档损坏、两个归档同时存在 | 保留现有文件，先修复官方安装，避免手动删掉唯一代码 |
+| PowerShell 禁止执行脚本或要求签名 | Setup 会在写入前停止；按电脑或组织允许的方式处理策略，脚本不自动放宽限制 |
+| 公共入口或 Program Files 拒绝访问 | 查看具体失败路径；需要相应写入权限。个人入口可作为共享入口失败时的回退 |
+| 自定义扫描目录不存在 | 确认盘符已挂载、目录拼写正确；恢复可访问状态再运行 |
+| 快捷方式在处理期间被修改 | 停止后续处理，重新预览，避免覆盖其他修改 |
+| 任务栏出现两个图标或旧图标仍在 | CMD 入口与应用窗口的任务栏分组可能不同；固定项缓存可能需要重新固定。非 `.lnk` 固定项不在自动修复范围内 |
 
-### 2. 动态 DOM 拦截 (Dynamic DOM Interception)
-在 `preload.js` 中注入 `MutationObserver`，实时监控页面 DOM 变化并替换英文文本为中文。
+- 不解析 PAC，不支持标准 `socks=...` 纯 SOCKS 系统代理配置；使用 HTTP／混合端口。
+- 系统代理关闭时按直连／TUN 处理，并清除继承的代理环境变量。仅通过环境变量提供代理的配置不属于此方案。
+- 工具不检测代理客户端是否运行、端口是否连通、账号是否可用或目标服务是否可达。
+- 自定义或移动到未知位置的快捷方式需要 `--scan-root`，不能保证找到任意位置、其他用户账户或所有 Windows 固定项。
+- 完成后的自动启动失败，不等于汉化／还原文件修改失败；应根据输出分别判断。`--no-launch` 可用于只处理安装文件。
+- 当前翻译依赖应用文件布局。新版本可能需要调整规则；不承诺所有版本、所有文本或所有平台均已验证。
 
-### 3. 原生 ASAR 解析器
-使用纯 Python 实现的 ASAR 文件格式解析器，零外部依赖。
+## 测试与代码说明
 
-## ⚠️ 已知限制
-
-- **思考日志为英文** - 受限于大模型的即时流式输出架构，智能体后台生成的思考日志（`Thought` 过程）无法汉化，但所有最终回复与前端界面均已 100% 汉化
-- **多平台支持** - 目前已完美适配 Windows 以及 macOS (Intel & M芯片) 平台，Linux 暂不支持
-- **版本依赖** - 针对 Antigravity v2.21.1 深度优化，其他版本亦具备高度兼容性
-
-## 📸 效果展示
-
-<div align="center">
-
-![antigravity-chinese](antigravity-chinese.png)
-
-*汉化后的 Antigravity 界面 - 所有文本已完全汉化*
-
-</div>
-
-**界面完全汉化包括：**
-- ✅ 侧边栏菜单（新建对话、历史对话、计划任务、项目）
-- ✅ 顶部导航栏（文件、音频、窗口）
-- ✅ 输入框提示文本和模型选择器
-- ✅ 设置页面所有选项和说明
-- ✅ 底层终端操作权限请求弹窗及动态状态提示
-
-> 💡 提示：要查看实际效果，双击运行 `Antigravity-Patcher.exe` 或 `Antigravity-Patcher.py` 即可体验完整的中文界面！
-
-## 🔐 安全性说明
-
-本项目是完全开源和安全的：
-
-### ✅ 我们做了什么
-
-- **仅修改界面文本** - 只在前端层面替换显示文本，不涉及网络通信、数据收集、账号信息访问
-- **开源透明** - 所有代码完全开源，无混淆、无加密、无隐藏逻辑
-- **可逆操作** - 提供完整的还原机制，一键恢复原版
-- **零外部依赖** - 纯 Python 标准库实现，不连接外部服务器
-
-### 🛡️ 技术原理
-
-1. **ASAR 解包** - 使用纯 Python 解析 Electron 的 ASAR 打包格式
-2. **代码注入** - 在 `preload.js` 和 `menu.js` 中追加翻译代码
-3. **DOM 监听** - 使用 `MutationObserver` 监听页面变化
-4. **文本替换** - 通过字典匹配将英文替换为中文
-
-### 关于免安装可执行版 (Windows .exe / macOS 二进制文件)
-
-- 该版本使用 [PyInstaller](https://pyinstaller.org/) 开源工具打包
-- 包含完整的 Python 运行时环境（因此文件较大约 8 MB）
-- Windows 下可能被部分杀毒软件误报，这是 PyInstaller 的已知问题
-- macOS 下可能被系统提示“无法验证开发者”，这是因为缺少苹果付费签名
-- 如有安全顾虑，推荐使用“从源码安装”的方式（代码完全透明）
-
-整个过程不涉及任何逆向工程或破解行为。
-
-## ❓ 常见问题
-
-<details>
-<summary><b>Q: Mac 版本运行提示“无法打开，因为无法验证开发者”怎么办？</b></summary>
-
-A: 这是由于 Mac 的 Gatekeeper 门禁机制引起的（由于本项目是开源免费工具，未购买苹果开发者签名）。解决方法：
-1. 方式一：前往「系统设置」 -> 「隐私与安全性」，向下滑动并点击「仍要打开」。
-2. 方式二：在终端执行 `xattr -cr 你下载的程序路径` 即可一键解除限制。
-</details>
-
-<details>
-<summary><b>Q: Python 脚本版和免安装版本有什么区别？</b></summary>
-
-A: 
-- **Python 脚本版**：需要 Python 环境，文件小，代码透明
-- **免安装版本**：无需 Python，开箱即用，但文件较大且可能被杀毒软件误报
-
-两者功能完全相同，推荐根据自己的需求选择。
-</details>
-
-<details>
-<summary><b>Q: 为什么 .exe 文件这么大？</b></summary>
-
-A: .exe 文件包含了完整的 Python 运行时环境，所以约 8 MB 是正常的。
-</details>
-
-<details>
-<summary><b>Q: 杀毒软件报毒怎么办？</b></summary>
-
-A: 这是 PyInstaller 打包的已知问题，非真实病毒。可以：
-- 添加到杀毒软件白名单
-- 使用 Python 脚本版代替（推荐）
-- 上传到 [VirusTotal](https://www.virustotal.com/) 验证
-</details>
-
-<details>
-<summary><b>Q: 为什么执行脚本时提示 "Python 不是内部或外部命令"？</b></summary>
-
-A: 这说明 Python 没有添加到系统环境变量中。请重新安装 Python，并在安装时勾选 "Add Python to PATH" 选项，或者直接使用无需 Python 环境的 `.exe` 版本。
-</details>
-
-<details>
-<summary><b>Q: 为什么有时 Antigravity 打开没有界面？是因为这个脚本导致软件损坏了吗？</b></summary>
-
-A: 通常这不是脚本损坏了软件，而是由 Electron 的后台残留机制导致的。遇到这种情况请排查：
-1. 软件可能默认最小化到了右下角的**系统托盘**，请尝试双击托盘黑色的 `^` 图标唤醒。
-2. Windows 任务管理器中可能残留了未完全关闭的 `Antigravity.exe` 僵尸进程。请按 `Ctrl+Shift+Esc` 结束所有 Antigravity 进程后再重新打开。
-3. 如果依然白屏或无反应，可能是杀毒软件拦截了解包的核心代码文件。请运行 `Restore.exe` 恢复官方原版，关闭杀软拦截后再重新运行汉化补丁即可满血复活。
-</details>
-
-<details>
-<summary><b>Q: Antigravity 官方每次更新项目后，这个汉化补丁能不能继续使用？</b></summary>
-
-A: **可以无缝继续使用！** 
-从 v2.21.1 版本开始，脚本引入了 **OTA 智能兼容机制**。当官方软件更新时，会释放新的核心文件，此时汉化会自动失效并短暂恢复为英文原版。您只需要**重新运行一次汉化补丁**，脚本会自动侦测到版本发生变化，自动清理旧版缓存并基于官方最新代码重新解包注入，完全兼容后续版本更新。
-</details>
-
-<details>
-<summary><b>Q: 这个补丁会影响软件的安全性吗？</b></summary>
-
-A: 不会。本补丁仅修改界面文本显示，不涉及网络通信、数据加密、账号认证、核心功能逻辑。所有修改都在前端层面，不影响软件与服务器的通信。
-</details>
-
-<details>
-<summary><b>Q: 如何添加新的翻译？</b></summary>
-
-A: 编辑 `Antigravity-Patcher.py` 文件中的 `dictionary` 字典，添加键值对：
-```python
-"English Text": "中文翻译",
+```powershell
+python -B -m unittest discover -s tests -v
 ```
-然后重新执行汉化脚本。
-</details>
 
-<details>
-<summary><b>Q: 支持其他操作系统吗？</b></summary>
+测试使用隔离目录及模拟的进程控制，覆盖归档校验、外置依赖、汉化／还原失败保护、快捷方式参数、扫描目录和不产生代理备份等行为，不应直接对正在使用的安装运行变更测试。
 
-A: 目前仅支持 Windows。macOS 和 Linux 版本的路径和机制不同，需要单独适配。
-</details>
+更详细的模块入口、文件状态和维护说明见 [PROJECT_STATUS.md](PROJECT_STATUS.md)。
 
-更多问题？欢迎在 [GitHub Issues](../../issues) 或 [Discussions](../../discussions) 中提问！
+## 界面示例
 
-## 🤝 参与贡献
+![Antigravity 中文界面示例](antigravity-chinese.png)
 
-欢迎提交 Issue 和 Pull Request！
+示例不代表所有版本、动态内容或模型输出均已翻译。新增词条可修改 `Antigravity-Patcher.py` 中的翻译字典，再运行汉化脚本。
 
-- 发现翻译错误或遗漏？请提交 [Issue](../../issues) 或直接 PR 修改
-- 有更好的技术方案？欢迎在 [Discussions](../../discussions) 讨论
+## 贡献与许可
 
-详细的贡献指南请查看 [CONTRIBUTING.md](CONTRIBUTING.md)
-
-## 📄 许可证
-
-本项目采用 [MIT License](LICENSE) 开源协议。
-
-## ⚠️ 免责声明
-
-- 本项目仅供学习交流使用
-- 使用本补丁造成的任何问题由用户自行承担
-- 请使用正版 Antigravity 软件
-- 请遵守 Antigravity 的服务条款
-
-## 🌟 Star History
-
-如果这个项目对你有帮助，请考虑给它一个 Star ⭐️
-
-## 📧 联系方式
-
-- Issues: [GitHub Issues](../../issues)
-- Discussions: [GitHub Discussions](../../discussions)
-
----
-
-<div align="center">
-
-**Made with ❤️ by Antigravity-zh-CN Contributors**
-
-</div>
+参阅 [贡献指南](CONTRIBUTING.md) 和 [MIT License](LICENSE)。问题可提交到 [本分支 Issues](https://github.com/DemotedHanXin/Antigravity-zh-CN/issues)。上游项目为 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN)。

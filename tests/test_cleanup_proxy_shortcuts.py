@@ -99,6 +99,47 @@ class CleanupTests(unittest.TestCase):
         planned = {e['path'] for e in self.plan()['entries'] if e['kind'] == 'shortcut'}
         self.assertIn(str(custom), planned)
 
+    def test_launcher_metadata_finds_custom_shortcut_without_backup_files(self):
+        custom_root = self.root / 'custom'
+        custom = self.link('custom.lnk', self.app / TOOL.LAUNCHERS[0], custom_root)
+        (self.app / TOOL.LAUNCHERS[1]).write_bytes(self.setup.launcher_ps1_bytes([str(custom_root)]))
+        self.assertFalse((self.app / TOOL.SETUP_BACKUPS).exists())
+        before_files = {p for p in self.root.rglob('*') if p.is_file()}
+        plan = self.plan()
+        self.assertIn(str(custom), {e['path'] for e in plan['entries'] if e['kind'] == 'shortcut'})
+        self.assertEqual(TOOL.apply_cleanup(plan, self.setup), 0)
+        self.assertEqual(self.links[str(custom)]['target'], str(self.app / 'Antigravity.exe'))
+        self.assertEqual({p for p in self.root.rglob('*') if p.is_file()},
+                         before_files - {self.app / name for name in TOOL.LAUNCHERS})
+
+    def test_missing_recorded_scan_root_prevents_cleanup(self):
+        custom_root = self.root / 'disconnected'
+        custom_root.mkdir()
+        (self.app / TOOL.LAUNCHERS[1]).write_bytes(self.setup.launcher_ps1_bytes([str(custom_root)]))
+        custom_root.rmdir()
+        before = {p: p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        with self.assertRaisesRegex(ValueError, '自定义快捷方式目录'):
+            self.plan()
+        self.assertEqual({p: p.read_bytes() for p in self.root.rglob('*') if p.is_file()}, before)
+
+    def test_mistyped_explicit_scan_root_prevents_cleanup(self):
+        with self.assertRaisesRegex(ValueError, '自定义快捷方式目录'):
+            TOOL.plan_cleanup(self.app, [str(self.root / 'missing')], self.setup)
+        self.assertTrue(all((self.app / name).is_file() for name in TOOL.LAUNCHERS))
+
+    def test_disconnected_root_after_preview_prevents_any_change(self):
+        custom_root = self.root / 'disconnected'
+        custom_root.mkdir()
+        target = self.link('desktop.lnk', self.app / TOOL.LAUNCHERS[0])
+        (self.app / TOOL.LAUNCHERS[1]).write_bytes(self.setup.launcher_ps1_bytes([str(custom_root)]))
+        plan = self.plan()
+        custom_root.rmdir()
+        before = target.read_bytes()
+        with self.assertRaisesRegex(ValueError, '自定义快捷方式目录'):
+            TOOL.apply_cleanup(plan, self.setup)
+        self.assertEqual(target.read_bytes(), before)
+        self.assertTrue(all((self.app / name).is_file() for name in TOOL.LAUNCHERS))
+
     def test_old_setup_backups_and_unknown_extra_files_are_preserved(self):
         folder = self.setup_backup()
         extra = folder / 'user-notes.txt'

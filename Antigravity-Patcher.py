@@ -1,23 +1,15 @@
 # coding: utf-8
+import argparse
 import os
-import json
-import struct
+from pathlib import Path
 import subprocess
-import shutil
 import sys
+import tempfile
 
-if sys.platform == "win32":
-    APP_DIR = os.path.join(os.getenv('LOCALAPPDATA', ''), 'Programs', 'antigravity')
-    RESOURCES_DIR = os.path.join(APP_DIR, "resources")
-elif sys.platform == "darwin":
-    APP_DIR = "/Applications/Antigravity.app"
-    RESOURCES_DIR = os.path.join(APP_DIR, "Contents", "Resources")
-else:
-    print("[错误] 当前仅支持 Windows 和 macOS 系统。")
-    sys.exit(1)
-
-ASAR_PATH = os.path.join(RESOURCES_DIR, "app.asar")
-UNPACKED_APP_DIR = os.path.join(RESOURCES_DIR, "app")
+from antigravity_common import (
+    discover_install, extract_asar, launch_application, remove_tree,
+    resources_dir, stop_application, validate_extracted_app,
+)
 
 DOM_TRANSLATOR_INJECTION = r"""
 // Antigravity Chinese Localization Engine
@@ -868,34 +860,9 @@ MENU_TRANSLATOR_INJECTION = r"""
 })();
 """
 
-def extract_asar(asar_path, dest_dir):
-    """Pure-Python asar archive extractor."""
-    with open(asar_path, 'rb') as f:
-        data = f.read(16)
-        magic, size, u1, header_size = struct.unpack('<4I', data)
-        header_json = f.read(header_size).decode('utf-8')
-        header = json.loads(header_json)
-        base_offset = 8 + size
-        
-        def extract_node(node, current_path):
-            if not os.path.exists(current_path):
-                os.makedirs(current_path)
-            for name, info in node.items():
-                path = os.path.join(current_path, name)
-                if 'files' in info:
-                    extract_node(info['files'], path)
-                elif 'offset' in info:
-                    f.seek(base_offset + int(info['offset']))
-                    file_data = f.read(int(info['size']))
-                    with open(path, 'wb') as out_f:
-                        out_f.write(file_data)
-        
-        extract_node(header.get('files', {}), dest_dir)
-
 def append_once(file_path, content, marker, name):
     if not os.path.exists(file_path):
-        print(f"[警告] 未找到文件 {os.path.basename(file_path)}，已跳过注入 {name}。")
-        return
+        raise ValueError(f"缺少必需汉化文件：{file_path}")
     
     with open(file_path, "r", encoding="utf-8") as f:
         existing = f.read()
@@ -929,119 +896,165 @@ def replace_in_file(file_path, target, replacement):
         f.write(content)
     print(f"[成功] 执行目标替换 ({os.path.basename(file_path)})")
 
-def apply_patch():
-    print("==================================================================")
-    print("                                                                ")
-    print("              Antigravity v2.21.1 桌面端 一键汉化补丁               ")
-    print("Github 开源项目地址：https://github.com/MIMICTE/Antigravity-zh-CN")
-    print("                                                                ")
-    print("==================================================================")
-    print("                                                                ")
-    print("[执行] 正在为您关闭 Antigravity 程序...")
-    if sys.platform == "win32":
-        os.system("taskkill /F /IM Antigravity.exe >nul 2>&1")
-    elif sys.platform == "darwin":
-        os.system("pkill -f Antigravity >/dev/null 2>&1")
+REQUIRED_PATCH_FILES = ('dist/preload.js', 'dist/menu.js', 'dist/tray.js')
 
-    # 1. 确保 unpacked app 文件夹存在
-    is_fresh_install = os.path.exists(ASAR_PATH) and not os.path.exists(ASAR_PATH + ".disabled")
-    if is_fresh_install and os.path.exists(UNPACKED_APP_DIR):
-        print("[状态] 检测到软件可能已更新，正在清理旧的解包缓存...")
-        shutil.rmtree(UNPACKED_APP_DIR, ignore_errors=True)
 
-    if not os.path.exists(UNPACKED_APP_DIR):
-        source_asar = ASAR_PATH
-        if not os.path.exists(source_asar) and os.path.exists(ASAR_PATH + ".disabled"):
-            source_asar = ASAR_PATH + ".disabled"
-            
-        if not os.path.exists(source_asar):
-            print(f"[错误] 未找到 app.asar: {ASAR_PATH}")
-            return False
+def _inject(stage):
+    append_once(stage / 'dist/preload.js', DOM_TRANSLATOR_INJECTION,
+                'Antigravity Chinese Localization Engine', 'Web UI Injection')
+    append_once(stage / 'dist/menu.js', MENU_TRANSLATOR_INJECTION,
+                'Antigravity Chinese Localization Engine - Menu', 'Menu Translator Injection')
+    replace_in_file(stage / 'dist/tray.js', "'Show Antigravity'", "'显示 Antigravity'")
+    replace_in_file(stage / 'dist/tray.js', "'Quit'", "'退出'")
+    loading = stage / 'dist/loadingOverlay.js'
+    if loading.is_file():
+        content = loading.read_text(encoding='utf-8')
+        loading.write_text(content.replace('>Loading Antigravity<', '>正在加载 Antigravity<'),
+                           encoding='utf-8')
 
-        print("[执行] 正在提取 app.asar 核心文件 (使用原生 Python 解析器)...")
+
+def _stamp(path):
+    info = path.stat()
+    return info.st_size, info.st_mtime_ns, info.st_ino
+
+
+def apply_patch(app_dir=None, no_launch=False):
+    root = discover_install(app_dir)
+    resources = resources_dir(root)
+    archive = resources / 'app.asar'
+    disabled = resources / 'app.asar.disabled'
+    app = resources / 'app'
+    if archive.exists() and disabled.exists():
+        raise ValueError('同时发现 app.asar 和 app.asar.disabled，可能发生软件更新。请核对两个归档版本或修复官方安装后重试；未修改任何文件。')
+    source = archive if archive.is_file() else disabled
+    if not source.is_file():
+        raise ValueError('未找到可验证的原始 app.asar 或 app.asar.disabled；已保留现有 app 目录。')
+    print('[安装目录] ' + str(root))
+    print('[执行] 从原始归档完整解包并校验外置依赖，准备汉化工作目录...')
+    before = _stamp(source)
+    stage = Path(tempfile.mkdtemp(prefix='.antigravity-localization-stage-', dir=str(resources)))
+    previous = None
+    installed = False
+    committed = False
+    moved_archive = False
+    preserve_stage = False
+    prepared = False
+    switch_started = False
+    try:
+        extract_asar(source, stage, unpacked_dir=resources / 'app.asar.unpacked')
+        validate_extracted_app(stage, REQUIRED_PATCH_FILES)
+        _inject(stage)
+        validate_extracted_app(stage, REQUIRED_PATCH_FILES)
+        prepared = True
+        if _stamp(source) != before:
+            raise RuntimeError('准备期间原始归档发生变化，未切换安装。请关闭更新程序后重试。')
+        print('[执行] 汉化文件校验通过，正在关闭当前安装的 Antigravity...')
+        stop_application(root)
+        if _stamp(source) != before or (source == archive and disabled.exists()) or (source == disabled and archive.exists()):
+            raise RuntimeError('安装文件在切换前发生变化，未修改当前入口。')
+        switch_started = True
+        if app.exists():
+            # Validate the exact directory before renaming it; never follow links.
+            from antigravity_common import _no_link
+            _no_link(app)
+            if not app.is_dir() or app.resolve().parent != resources.resolve():
+                raise ValueError('现有 app 不是预期安装目录中的普通目录。')
+            previous = Path(tempfile.mkdtemp(prefix='.antigravity-localization-previous-', dir=str(resources)))
+            previous.rmdir()
+            app.rename(previous)
+        stage.rename(app)
+        installed = True
+        if source == archive:
+            archive.rename(disabled)
+            moved_archive = True
+        committed = True
+    except BaseException:
+        if not switch_started:
+            # Preparation / process-stop failures may only discard staging.
+            # There has been no active layout change for us to undo.
+            raise
+        # Never recursively delete the active app during rollback. Rename it
+        # aside first, restore a launchable layout, then remove inactive files.
+        rollback_errors = []
+        archive_restored = True
+        if moved_archive or (source == archive and not archive.exists() and disabled.is_file() and _stamp(disabled) == before):
+            try:
+                disabled.rename(archive)
+            except (OSError, KeyboardInterrupt) as error:
+                archive_restored = archive.is_file()
+                if not archive_restored:
+                    rollback_errors.append('原始归档恢复失败，已保留完整的新 app：' + str(error))
+        new_active = installed or (not stage.exists() and app.exists())
+        if archive_restored:
+            if new_active:
+                if previous is None and source == disabled:
+                    # The input already had no active entry. Keep the validated
+                    # app instead of rolling back into that broken layout.
+                    rollback_errors.append('原安装没有可恢复的活动入口，已保留通过校验的新 app。')
+                else:
+                    try:
+                        app.rename(stage)
+                    except (OSError, KeyboardInterrupt) as error:
+                        if app.exists():
+                            rollback_errors.append('无法隔离新 app，已保留该完整目录：' + str(error))
+            if previous is not None and previous.exists() and not app.exists():
+                try:
+                    previous.rename(app)
+                except (OSError, KeyboardInterrupt) as error:
+                    rollback_errors.append('旧工作目录恢复失败，保留位置：' + str(previous) + '；' + str(error))
+                    if stage.exists() and not app.exists():
+                        try:
+                            stage.rename(app)
+                        except (OSError, KeyboardInterrupt) as recovery_error:
+                            rollback_errors.append('完整的新工作目录保留位置：' + str(stage) + '；' + str(recovery_error))
+                            preserve_stage = True
+            if prepared and switch_started and not app.exists() and not archive.exists() and stage.exists():
+                try:
+                    stage.rename(app)
+                except (OSError, KeyboardInterrupt) as error:
+                    preserve_stage = True
+                    rollback_errors.append('请保留待恢复的完整工作目录：' + str(stage) + '；' + str(error))
+        if rollback_errors:
+            raise RuntimeError('汉化切换中断，部分回退未完成；请勿删除原始归档或保留目录。\\n' + '\\n'.join(rollback_errors))
+        raise
+    finally:
+        if stage.exists() and not preserve_stage:
+            remove_tree(stage, resources)
+    if committed and previous is not None and previous.exists():
         try:
-            extract_asar(source_asar, UNPACKED_APP_DIR)
-            print("[完成] 文件提取完毕.")
-        except Exception as e:
-            print(f"[错误] 提取 app.asar 失败: {e}")
-            return False
-    else:
-        print(f"[状态] 发现已解包的工作目录: {UNPACKED_APP_DIR}")
-
-    # 2. 注入各个组件
-    preload_path = os.path.join(UNPACKED_APP_DIR, "dist", "preload.js")
-    menu_path = os.path.join(UNPACKED_APP_DIR, "dist", "menu.js")
-    tray_path = os.path.join(UNPACKED_APP_DIR, "dist", "tray.js")
-
-    append_once(preload_path, DOM_TRANSLATOR_INJECTION, "Antigravity Chinese Localization Engine", "Web UI Injection")
-    append_once(menu_path, MENU_TRANSLATOR_INJECTION, "Antigravity Chinese Localization Engine - Menu", "Menu Translator Injection")
-
-    replace_in_file(tray_path, "'Show Antigravity'", "'显示 Antigravity'")
-    replace_in_file(tray_path, "'Quit'", "'退出'")
-
-    # 3. 汉化 loadingOverlay (Splash Screen)
-    loading_path = os.path.join(UNPACKED_APP_DIR, "dist", "loadingOverlay.js")
-    if os.path.exists(loading_path):
-        with open(loading_path, "r", encoding="utf-8") as f:
-            loading_content = f.read()
-        patched_loading = loading_content.replace(">Loading Antigravity<", ">正在加载 Antigravity<")
-        if patched_loading != loading_content:
-            with open(loading_path, "w", encoding="utf-8") as f:
-                f.write(patched_loading)
-            print(f"[成功] 已成功汉化启动加载界面 ({os.path.basename(loading_path)})")
-
-    # 4. 禁用原生 app.asar
-    if os.path.exists(ASAR_PATH):
-        print("[执行] 正在禁用官方 app.asar，以强制读取汉化代码...")
-        os.rename(ASAR_PATH, ASAR_PATH + ".disabled")
-        print("[成功] app.asar -> app.asar.disabled")
-
-    print("                                                                ")
-    print("==================================================================")
-    print("                                                                ")
-    print("       汉化补丁注入成功！正在为您自动启动 Antigravity...              ")
-    print("                                                                ")
-    print("==================================================================")
-    
-    if sys.platform == "win32":
-        exe_path = os.path.join(APP_DIR, "Antigravity.exe")
-        if os.path.exists(exe_path):
-            launch_args = [exe_path]
-            proxy_launcher = os.path.join(APP_DIR, "Antigravity-Proxy.ps1")
-            if os.path.isfile(proxy_launcher):
-                powershell_path = os.path.join(
-                    os.environ.get("SystemRoot", r"C:\Windows"),
-                    "System32", "WindowsPowerShell", "v1.0", "powershell.exe"
-                )
-                launch_args = [
-                    powershell_path, "-NoLogo", "-NoProfile", "-NonInteractive",
-                    "-File", proxy_launcher
-                ]
-                print("[启动] 使用代理启动器 Antigravity-Proxy.ps1。")
-            DETACHED_PROCESS = 0x00000008
-            CREATE_NEW_PROCESS_GROUP = 0x00000200
-            subprocess.Popen(
-                launch_args,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
-                close_fds=True
-            )
-    elif sys.platform == "darwin":
-        subprocess.Popen(["open", APP_DIR])
+            remove_tree(previous, resources)
+        except (OSError, ValueError) as error:
+            raise RuntimeError('汉化已生效，但旧工作目录未清理完成：' + str(previous) + '；' + str(error))
+    print('[完成] 汉化文件与主入口校验通过；原始归档保留为 app.asar.disabled，用于还原。')
+    if not no_launch:
+        launch_application(root)
     return True
 
-if __name__ == "__main__":
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description='安全汉化 Antigravity：完整校验归档与依赖后切换，失败保留原始程序。')
+    parser.add_argument('--app-dir', help='安装目录；macOS 指定 Antigravity.app')
+    parser.add_argument('--no-launch', action='store_true', help='完成后不自动启动软件')
+    args = parser.parse_args(argv)
     try:
-        apply_patch()
-        input("\n执行完毕，按 Enter 键退出...")
+        apply_patch(args.app_dir, args.no_launch)
+        return 0
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+        print('[错误] ' + str(error))
+        return 1
     except KeyboardInterrupt:
-        print("\n\n[提示] 用户取消操作。")
-        input("\n按 Enter 键退出...")
-    except Exception as e:
-        print(f"\n[错误] 执行过程中出现异常: {e}")
-        print("\n如果问题持续，请访问 GitHub 提交 Issue:")
-        print("https://github.com/MIMICTE/Antigravity-zh-CN/issues")
-        input("\n按 Enter 键退出...")
-        raise
+        print('[取消] 操作已中断，请查看是否有清理或回退错误。')
+        return 130
+
+
+if __name__ == '__main__':
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
+    result = main()
+    if len(sys.argv) == 1 and sys.stdin.isatty():
+        try:
+            input('\n执行完毕，按 Enter 键退出...')
+        except (EOFError, KeyboardInterrupt):
+            pass
+    sys.exit(result)

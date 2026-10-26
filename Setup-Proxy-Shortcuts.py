@@ -8,20 +8,23 @@ import ntpath
 import os
 from pathlib import Path
 import re
-import shutil
 import stat
 import subprocess
 import sys
 import tempfile
-from datetime import datetime
 
 
 LAUNCHER_CMD = r'''@echo off
 setlocal DisableDelayedExpansion
 set "ANTIGRAVITY_PROXY_START_DIRECTORY=%CD%"
+set "PSModulePath=%SystemRoot%\System32\WindowsPowerShell\v1.0\Modules"
 rem Read the current Windows system proxy on every launch.
 "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -File "%~dp0Antigravity-Proxy.ps1" %*
-exit /b %errorlevel%
+set "ANTIGRAVITY_PROXY_EXIT_CODE=%errorlevel%"
+if "%ANTIGRAVITY_PROXY_EXIT_CODE%"=="0" exit /b 0
+rem Exit 2 means the script already displayed its own error message.
+if not "%ANTIGRAVITY_PROXY_EXIT_CODE%"=="2" "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "Add-Type -AssemblyName System.Windows.Forms; [void][System.Windows.Forms.MessageBox]::Show('The proxy launcher could not run. Run Setup-Proxy-Shortcuts.py in a terminal to check the PowerShell execution policy. No system policy was changed.', 'Antigravity launch failed')"
+exit /b %ANTIGRAVITY_PROXY_EXIT_CODE%
 '''
 LAUNCHER_PS1 = r'''param(
     [switch]$Diagnose,
@@ -29,6 +32,7 @@ LAUNCHER_PS1 = r'''param(
 )
 
 $ErrorActionPreference = 'Stop'
+$env:PSModulePath = [IO.Path]::Combine($PSHOME, 'Modules')
 
 function ConvertTo-AntigravityProxyUrl {
     param([string]$Value)
@@ -138,7 +142,7 @@ try {
         Add-Type -AssemblyName System.Windows.Forms
         [void][System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'Antigravity 启动提示')
     }
-    exit 1
+    exit 2
 }
 '''
 
@@ -155,6 +159,13 @@ function Get-AntigravityFileHash([string]$path) {
     finally { $hasher.Dispose() }
 }
 switch ($request.action) {
+    'policy' {
+        # Import the Windows PowerShell binary directly. Some installations load
+        # duplicate ObjectSecurity type data through the module manifest.
+        $security = [Reflection.Assembly]::Load('Microsoft.PowerShell.Security, Version=3.0.0.0, Culture=neutral, PublicKeyToken=31bf3856ad364e35')
+        Import-Module $security.Location -ErrorAction Stop
+        @{ effective = [string](Get-ExecutionPolicy); machine = [string](Get-ExecutionPolicy -Scope MachinePolicy); user = [string](Get-ExecutionPolicy -Scope UserPolicy) } | ConvertTo-Json -Compress
+    }
     'folders' {
         $folders = @{}
         foreach ($name in @('Desktop', 'AllUsersDesktop', 'StartMenu', 'AllUsersStartMenu', 'Startup', 'AllUsersStartup')) {
@@ -232,8 +243,13 @@ def powershell_path():
 def run_powershell(request):
     encoded = base64.b64encode(POWERSHELL_BRIDGE.encode('utf-16-le')).decode('ascii')
     environment = dict(os.environ)
-    # PowerShell 7's module paths can hide Windows PowerShell 5.1's own modules.
-    environment.pop('PSModulePath', None)
+    # Only bundled 5.1 modules are needed. Inherited/user module paths may select
+    # incompatible PowerShell 7 modules, even when the variable is simply unset.
+    environment['PSModulePath'] = str(Path(os.environ.get('SystemRoot', r'C:\Windows')) /
+                                       'System32/WindowsPowerShell/v1.0/Modules')
+    if request.get('action') == 'policy':
+        # A temporary terminal Process policy does not apply to Explorer shortcuts.
+        environment.pop('PSExecutionPolicyPreference', None)
     result = subprocess.run(
         [str(powershell_path()), '-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
         input=json.dumps(request, ensure_ascii=False).encode('utf-8'),
@@ -295,8 +311,66 @@ def scan_roots(folders, extra):
     roots = list(folders.values())
     if os.environ.get('APPDATA'):
         roots.append(str(Path(os.environ['APPDATA']) / 'Microsoft/Internet Explorer/Quick Launch'))
-    roots.extend(extra)
+    roots.extend(validate_scan_roots(extra))
     return list({path_key(p): Path(p).expanduser().resolve() for p in roots if p}.values())
+
+
+METADATA_PREFIX = '# Antigravity-Proxy-Metadata: '
+
+
+def regular_bytes(path):
+    path = Path(path)
+    info = path.lstat()
+    if not stat.S_ISREG(info.st_mode) or getattr(info, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 1024):
+        raise ValueError('拒绝修改符号链接、重解析点或非普通文件：' + str(path))
+    return path.read_bytes()
+
+
+def validate_scan_roots(roots):
+    result = {}
+    for value in roots:
+        path = Path(os.path.expandvars(str(value))).expanduser().resolve()
+        if not path.is_dir():
+            raise ValueError('自定义快捷方式目录不存在或不可访问，未开始修改：' + str(path))
+        result[path_key(path)] = str(path)
+    return list(result.values())
+
+
+def read_launcher_scan_roots(app_dir):
+    """Read data from a comment, never execute an installed launcher."""
+    path = Path(app_dir) / 'Antigravity-Proxy.ps1'
+    if not path.exists():
+        return []
+    lines = regular_bytes(path).decode('utf-8-sig').splitlines()
+    matches = [line[len(METADATA_PREFIX):] for line in lines if line.startswith(METADATA_PREFIX)]
+    if not matches:
+        return []  # Legacy launchers require --scan-root for custom locations.
+    if len(matches) != 1:
+        raise ValueError('代理启动器包含重复的目录记录，未开始修改。')
+    try:
+        data = json.loads(matches[0])
+        roots = data['scan_roots']
+        if data.get('format') != 1 or not isinstance(roots, list) or any(
+                not isinstance(item, str) or not Path(item).is_absolute() for item in roots):
+            raise ValueError('Invalid metadata')
+    except (KeyError, TypeError, ValueError) as error:
+        raise ValueError('代理启动器中的快捷方式目录记录无效，未开始修改。') from error
+    return validate_scan_roots(roots)
+
+
+def launcher_ps1_bytes(scan_directories):
+    metadata = {'format': 1, 'scan_roots': validate_scan_roots(scan_directories)}
+    source = METADATA_PREFIX + json.dumps(metadata, ensure_ascii=True, separators=(',', ':')) + '\n' + LAUNCHER_PS1
+    return source.replace('\n', '\r\n').encode('utf-8-sig')
+
+
+def check_execution_policy():
+    policy = run_powershell({'action': 'policy'})
+    effective = policy.get('effective', '')
+    if effective not in ('RemoteSigned', 'Unrestricted', 'Bypass'):
+        raise ValueError('PowerShell 执行策略为 {}，无法运行此未签名的本地代理启动器；未写入文件或修改快捷方式。'
+                         '请先按你或组织的安全要求配置允许的脚本执行方式，再重试。脚本不会修改或绕过执行策略。'.format(effective or '未知'))
+    return effective
 
 
 def find_shortcuts(roots):
@@ -378,87 +452,75 @@ def atomic_write(path, data):
             os.unlink(temporary)
 
 
-class Backup:
-    def __init__(self, app_dir):
-        root = app_dir / 'antigravity-proxy-backups'
-        root.mkdir(exist_ok=True)
-        self.folder = Path(tempfile.mkdtemp(prefix=datetime.now().strftime('%Y%m%d-%H%M%S-'), dir=str(root)))
-        self.manifest = {'format': 1, 'app_dir': str(app_dir), 'entries': []}
-        self.save()
-
-    def save(self):
-        atomic_write(self.folder / 'manifest.json', json.dumps(self.manifest, ensure_ascii=False, indent=2).encode('utf-8'))
-
-    def prepare(self, path):
-        path = Path(path)
-        old = path.read_bytes() if path.exists() else None
-        entry = {'path': str(path), 'backup': None, 'before_hash': sha256(old) if old is not None else None, 'after_hash': None}
-        if old is not None:
-            entry['backup'] = '{:04d}.bin'.format(len(self.manifest['entries']))
-            shutil.copy2(str(path), str(self.folder / entry['backup']))
-        self.manifest['entries'].append(entry)
-        self.save()
-        return entry
-
-    def complete(self, entry):
-        entry['after_hash'] = sha256(Path(entry['path']).read_bytes())
-        self.save()
-
-
-def restore_backup(folder, preview=False):
-    folder = Path(folder).resolve()
-    manifest = json.loads((folder / 'manifest.json').read_text(encoding='utf-8'))
-    if manifest.get('format') != 1:
-        raise ValueError('不支持的备份格式。')
-    operations = []
-    errors = 0
-    for entry in reversed(manifest['entries']):
-        target = Path(entry['path'])
-        try:
-            current_hash = sha256(target.read_bytes()) if target.exists() else None
-            if current_hash == entry['before_hash']:
-                print('[已还原] ' + str(target))
-                continue
-            if not entry.get('after_hash'):
-                raise ValueError('此项写入未完成且文件发生了变化，需要先人工核对备份。')
-            if current_hash != entry['after_hash']:
-                raise ValueError('文件在修复后又被修改或删除，为避免覆盖新内容，跳过。')
-            saved = None
-            if entry['backup']:
-                source = (folder / entry['backup']).resolve()
-                if source.parent != folder:
-                    raise ValueError('备份路径不合法。')
-                saved = source.read_bytes()
-                if sha256(saved) != entry['before_hash']:
-                    raise ValueError('备份校验失败。')
-            operations.append((target, saved))
-        except (OSError, ValueError) as error:
-            errors += 1
-            print('[跳过] {}：{}'.format(target, error))
-    if errors:
-        print('[未还原] 发现冲突，未修改任何文件；保留启动器以免已有快捷方式失效。')
-        return 2
-    for target, saved in operations:
-        print(('[预览还原] ' if preview else '[还原] ') + str(target))
-        if not preview:
+def deploy_launchers(updates, original):
+    """Rollback an interrupted two-file update using only in-memory old bytes."""
+    attempted = []
+    try:
+        for path, data in updates.items():
+            current = regular_bytes(path) if path.exists() else None
+            if current != original[path]:
+                raise ValueError('启动文件在扫描后已被修改：' + str(path))
+            # Record before replacement: Ctrl+C may arrive after os.replace but
+            # before atomic_write returns to its caller.
+            attempted.append(path)
+            atomic_write(path, data)
+            print('[已部署] ' + str(path))
+    except BaseException as error:
+        rollback_errors = []
+        for path in reversed(attempted):
             try:
-                if saved is None:
-                    target.unlink()
+                current = regular_bytes(path) if path.exists() else None
+                if current == original[path]:
+                    continue  # Replacement did not happen.
+                if current != updates[path]:
+                    raise ValueError('启动文件又被修改，保留当前内容')
+                old = original[path]
+                if old is None:
+                    path.unlink()
                 else:
-                    atomic_write(target, saved)
-            except OSError as error:
-                print('[停止还原] {}：{}。剩余启动文件已保留。'.format(target, error))
-                return 2
-    if not preview:
-        run_powershell({'action': 'notify'})
-    return 2 if errors else 0
+                    atomic_write(path, old)
+            except BaseException as rollback_error:
+                rollback_errors.append('{}：{}'.format(path, rollback_error))
+        detail = '\n回退未完成，请核对：' + '\n'.join(rollback_errors) if rollback_errors else '；本次已写入的启动文件已回退。'
+        if isinstance(error, (KeyboardInterrupt, SystemExit)):
+            print('[中断]' + detail)
+            raise
+        raise RuntimeError('代理启动文件部署失败：' + str(error) + detail) from error
+
+
+def personal_menu_plan(folders, app_dir):
+    if not folders.get('StartMenu'):
+        raise ValueError('无法确定当前用户开始菜单目录。')
+    menu = Path(folders['StartMenu']) / 'Programs'
+    target = menu / 'Antigravity (Proxy).lnk'
+    number = 2
+    while target.exists():
+        target = menu / ('Antigravity (Proxy {}).lnk'.format(number))
+        number += 1
+    return {'path': str(target), 'target': str(app_dir / 'Antigravity-Proxy.cmd'),
+            'arguments': '', 'icon': str(app_dir / 'Antigravity.exe') + ',0',
+            'working_directory': str(app_dir)}
+
+
+def write_shortcut(plan):
+    current = Path(plan['path'])
+    current_hash = sha256(regular_bytes(current)) if current.exists() else None
+    expected_hash = plan.get('snapshot_hash')
+    if current_hash != expected_hash:
+        raise RuntimeError('快捷方式在扫描后已被修改，保留当前内容。请重新运行脚本。')
+    current.parent.mkdir(parents=True, exist_ok=True)
+    run_powershell(dict(plan, action='write', before_hash=expected_hash))
+    print('[已修复] ' + plan['path'])
 
 
 def install(args):
     app_dir = discover_install(args.app_dir)
+    policy = check_execution_policy()
+    extra_roots = validate_scan_roots(read_launcher_scan_roots(app_dir) + list(args.scan_root))
     folders = run_powershell({'action': 'folders'})
-    roots = scan_roots(folders, args.scan_root)
+    roots = scan_roots(folders, extra_roots)
     print('[安装目录] ' + str(app_dir))
+    print('[执行策略] ' + policy + '（只读检查，不修改系统设置）')
     for root in roots:
         print('[扫描目录] ' + str(root))
     paths, warnings = find_shortcuts(roots)
@@ -467,24 +529,20 @@ def install(args):
     plans, ready, plan_warnings = make_plan(snapshot['links'], app_dir)
     warnings.extend(plan_warnings)
     print('[扫描结果] {} 个快捷方式；需要修复 {} 个；已配置 {} 个。'.format(len(paths), len(plans), len(ready)))
-    # Guarantee a searchable per-user Start Menu entry when no matching entry exists.
     menu_roots = [path_key(folders[name]) + '\\' for name in ('StartMenu', 'AllUsersStartMenu') if folders.get(name)]
-    matching = [plan['path'] for plan in plans] + ready
-    if not any(any(path_key(path).startswith(root) for root in menu_roots) for path in matching):
-        if not folders.get('StartMenu'):
-            raise ValueError('无法确定当前用户开始菜单目录。')
-        menu = Path(folders['StartMenu']) / 'Programs'
-        target = menu / 'Antigravity (Proxy).lnk'
-        number = 2
-        while target.exists():
-            target = menu / ('Antigravity (Proxy {}).lnk'.format(number))
-            number += 1
-        plans.append({'path': str(target), 'target': str(app_dir / 'Antigravity-Proxy.cmd'), 'arguments': '', 'icon': str(app_dir / 'Antigravity.exe') + ',0', 'working_directory': str(app_dir)})
+
+    def has_menu_entry(paths_to_check):
+        return any(any(path_key(path).startswith(root) for root in menu_roots) for path in paths_to_check)
+
+    if not has_menu_entry([plan['path'] for plan in plans] + ready):
+        plans.append(personal_menu_plan(folders, app_dir))
     content = {
+        # Install the PS1 first so the CMD never points at a missing new script.
+        app_dir / 'Antigravity-Proxy.ps1': launcher_ps1_bytes(extra_roots),
         app_dir / 'Antigravity-Proxy.cmd': LAUNCHER_CMD.replace('\n', '\r\n').encode('ascii'),
-        app_dir / 'Antigravity-Proxy.ps1': LAUNCHER_PS1.replace('\n', '\r\n').encode('utf-8-sig'),
     }
-    updates = {path: data for path, data in content.items() if not path.is_file() or path.read_bytes() != data}
+    original = {path: regular_bytes(path) if path.exists() else None for path in content}
+    updates = {path: data for path, data in content.items() if original[path] != data}
     for path in updates:
         print('[计划部署] ' + str(path))
     for plan in plans:
@@ -492,46 +550,43 @@ def install(args):
     for warning in warnings:
         print('[注意] ' + warning)
     if args.dry_run:
-        print('[预览结束] 没有写入文件或修改快捷方式。')
+        print('[预览结束] 没有写入文件或修改快捷方式；公共开始菜单入口修改失败时将尝试创建个人入口。')
         return 2 if warnings else 0
     if not updates and not plans:
         print('[完成] 启动文件及已扫描的快捷方式都已配置，无需重复修改。')
         return 2 if warnings else 0
-    backup = Backup(app_dir)
-    print('[备份目录] ' + str(backup.folder))
-    # Deploy both launcher files before changing any shortcut.
-    for path, data in updates.items():
-        entry = backup.prepare(path)
-        atomic_write(path, data)
-        backup.complete(entry)
-        print('[已部署] ' + str(path))
-    failures = len(warnings)
+
+    # Reject concurrent edits before any deployment. The bridge checks again.
     for plan in plans:
-        entry = None
+        path = Path(plan['path'])
+        current_hash = sha256(regular_bytes(path)) if path.exists() else None
+        if current_hash != plan.get('snapshot_hash'):
+            raise ValueError('快捷方式在扫描后已被修改，未开始写入：' + str(path))
+    deploy_launchers(updates, original)
+    failures = len(warnings)
+    successful = list(ready)
+    attempted = set()
+    for plan in plans:
+        attempted.add(path_key(plan['path']))
         try:
-            Path(plan['path']).parent.mkdir(parents=True, exist_ok=True)
-            current = Path(plan['path'])
-            current_hash = sha256(current.read_bytes()) if current.exists() else None
-            expected_hash = plan.get('snapshot_hash')
-            if current_hash != expected_hash:
-                raise RuntimeError('快捷方式在扫描后已被修改，保留当前内容。请重新运行脚本。')
-            entry = backup.prepare(plan['path'])
-            if entry['before_hash'] != expected_hash:
-                raise RuntimeError('快捷方式在备份时已被修改，保留当前内容。请重新运行脚本。')
-            run_powershell(dict(plan, action='write', before_hash=expected_hash))
-            backup.complete(entry)
-            print('[已修复] ' + plan['path'])
-        except (OSError, RuntimeError) as error:
+            write_shortcut(plan)
+            successful.append(plan['path'])
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
             failures += 1
-            # A refused write may mean the user edited the link concurrently.
-            # Never label that unknown content as our own completed change.
-            if entry:
-                entry['error'] = str(error)
-                backup.save()
             print('[失败] {}：{}'.format(plan['path'], error))
+    # An inaccessible public entry is not a working search entry.
+    if not has_menu_entry(successful):
+        try:
+            fallback = personal_menu_plan(folders, app_dir)
+            if path_key(fallback['path']) not in attempted:
+                write_shortcut(fallback)
+                successful.append(fallback['path'])
+                print('[个人入口] 公共入口不可用，已创建当前用户开始菜单入口。')
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+            failures += 1
+            print('[个人入口失败] ' + str(error))
     run_powershell({'action': 'notify'})
-    print('[完成] 修改已保存；Windows 搜索/任务栏可能需要关闭后重新打开。')
-    print('[还原命令] python "{}" --restore "{}"'.format(Path(__file__).name, backup.folder))
+    print('[完成] 修改已保存；不创建备份或日志。移除代理请运行 Cleanup-Proxy-Shortcuts.py。')
     print('[说明] 不会结束正在运行的 Antigravity；新代理设置在下次完全退出后启动时生效。')
     if failures:
         print('[注意] 部分入口未处理。共享目录若提示拒绝访问，请以管理员身份重试；自定义目录可用 --scan-root 补充。')
@@ -539,16 +594,18 @@ def install(args):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='创建 Antigravity 系统代理启动器，备份并修复桌面、开始菜单、快速启动和任务栏的 .lnk 快捷方式。')
+    parser = argparse.ArgumentParser(description='创建 Antigravity 系统代理启动器并修复 .lnk 快捷方式，不创建备份；自定义扫描目录记录在 PS1 注释中。')
     parser.add_argument('--app-dir', help='手动指定包含 Antigravity.exe 的安装目录')
     parser.add_argument('--scan-root', action='append', default=[], help='额外递归扫描目录，可重复使用')
     parser.add_argument('--dry-run', action='store_true', help='仅预览，不修改文件')
-    parser.add_argument('--restore', metavar='备份目录', help='还原指定备份；不会覆盖修复后再次改动的文件')
     args = parser.parse_args(argv)
     if sys.platform != 'win32':
         parser.error('此脚本仅支持 Windows。')
     try:
-        return restore_backup(args.restore, args.dry_run) if args.restore else install(args)
+        return install(args)
+    except KeyboardInterrupt:
+        print('[中断] 用户取消操作。已完成的快捷方式仍保留；可重新运行脚本继续处理。')
+        return 130
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         print('[错误] ' + str(error))
         return 1
