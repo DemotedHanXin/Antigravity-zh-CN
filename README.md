@@ -99,13 +99,13 @@ python Setup-Proxy-Shortcuts.py --restore "BACKUP"
 python Cleanup-Proxy-Shortcuts.py --dry-run
 # 执行清理
 python Cleanup-Proxy-Shortcuts.py
-# 撤销清理，恢复归档中的代理启动文件和快捷方式
-python Cleanup-Proxy-Shortcuts.py --restore "BACKUP"
+# 以后需要代理启动时，重新创建启动文件并配置快捷方式
+python Setup-Proxy-Shortcuts.py
 ```
 
 脚本将所有扫描到的、直接指向 `Antigravity-Proxy.cmd` 或 `Antigravity-Proxy.ps1` 的 `.lnk` **保留并改回同一安装目录中的 `Antigravity.exe`**，恢复编码前的原始启动参数、保留图标和工作目录，并改为正常显示窗口。只有在相关快捷方式全部处理成功后，才删除安装目录里的这两个代理启动文件。原有 EXE 快捷方式、其他软件入口和 `antigravity-proxy-backups` 旧修复备份均保留。支持 `--app-dir` 和可重复的 `--scan-root`，也会检查旧修复记录中的自定义快捷方式；不识别的启动器参数会报错并保留原状。
 
-改动前会校验并归档到 `%LOCALAPPDATA%\AntigravityProxyCleanupBackups`，可用 `--backup-dir` 指定安装目录之外的位置。`--restore` 可撤销本次清理，也兼容旧版 v1 清理归档，可找回旧版清理时删除的文件及快捷方式；若目标后来又被修改，会停止还原以保护新内容。脚本不会修改软件本体、汉化文件或全局代理，也不会结束正在运行的软件。清理后的快捷方式直接启动 EXE，不再自动注入代理。部分 Windows 固定项不是 `.lnk`，不属于脚本处理范围。
+清理脚本使用直接删除，不进入回收站，**不创建备份、归档、日志或还原文件**，也不再提供 `--backup-dir` 和 `--restore`。以后需要代理启动时，只需重新运行 `Setup-Proxy-Shortcuts.py` 创建启动文件并配置快捷方式。脚本只在内存中校验待处理文件，若文件发生变化或快捷方式处理失败，会停止后续操作。此前已经存在的历史备份不会自动删除。脚本不会修改软件本体、汉化文件或全局代理，也不会结束正在运行的软件。清理后的快捷方式直接启动 EXE，不再自动注入代理。部分 Windows 固定项不是 `.lnk`，不属于脚本处理范围。
 
 ## 💡 技术原理
 

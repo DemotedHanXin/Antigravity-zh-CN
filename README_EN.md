@@ -97,12 +97,13 @@ Keep [Cleanup-Proxy-Shortcuts.py](Cleanup-Proxy-Shortcuts.py) beside `Setup-Prox
 ```powershell
 python Cleanup-Proxy-Shortcuts.py --dry-run
 python Cleanup-Proxy-Shortcuts.py
-python Cleanup-Proxy-Shortcuts.py --restore "BACKUP"
+# Recreate proxy launchers and configure shortcuts when needed again:
+python Setup-Proxy-Shortcuts.py
 ```
 
 Cleanup **keeps each scanned `.lnk` targeting `Antigravity-Proxy.cmd` or `Antigravity-Proxy.ps1` and redirects it to `Antigravity.exe` in the same installation directory**. It decodes the original application arguments, preserves the icon and working directory, and restores normal window display. Only after all matching shortcuts have been handled does it delete the two installed proxy launcher files. Direct EXE shortcuts, other applications and the old `antigravity-proxy-backups` directory are preserved. Use `--app-dir` or repeat `--scan-root` for custom locations; recorded shortcut paths in setup backups are also checked. Unrecognized launcher arguments cause an error and are left unchanged.
 
-Before changes, files are verified and archived under `%LOCALAPPDATA%\AntigravityProxyCleanupBackups`. Use `--backup-dir` to choose another location outside the application directory. `--restore` undoes cleanup and restores the archived proxy launch setup; it also supports legacy v1 archives to recover files and shortcuts deleted by that version. Restore stops if a target has subsequently changed. Application files, localization, global proxy settings and running processes are left untouched. The restored EXE shortcuts no longer inject proxy settings. Windows pins that are not stored as `.lnk` files are outside this script's scope.
+Cleanup deletes files directly without using the Recycle Bin. **It creates no backups, archives, logs or recovery files**, and no longer supports `--backup-dir` or `--restore`. To enable proxy launching again, rerun `Setup-Proxy-Shortcuts.py` to recreate the launchers and configure shortcuts. File checks are performed in memory; changed files or shortcut failures stop subsequent operations. Historical backups already on disk are not automatically deleted. Application files, localization, global proxy settings and running processes are left untouched. The EXE shortcuts no longer inject proxy settings. Windows pins that are not stored as `.lnk` files are outside this script's scope.
 
 ## 💡 Technical Approach
 

@@ -22,7 +22,6 @@ class CleanupTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.app = self.root / '安装 目录'
         self.desktop = self.root / '桌面'
-        self.archive_root = self.root / '清理 归档'
         self.app.mkdir()
         self.desktop.mkdir()
         (self.app / 'Antigravity.exe').write_bytes(b'original application')
@@ -74,9 +73,6 @@ class CleanupTests(unittest.TestCase):
     def plan(self):
         return TOOL.plan_cleanup(self.app, [], self.setup)
 
-    def latest_archive(self):
-        return next(self.archive_root.iterdir())
-
     def setup_backup(self, recorded_link=None):
         folder = self.app / TOOL.SETUP_BACKUPS / '20261026-test'
         folder.mkdir(parents=True)
@@ -110,7 +106,7 @@ class CleanupTests(unittest.TestCase):
         inventory = {str(p): p.read_bytes() for p in folder.iterdir()}
         plan = self.plan()
         self.assertTrue(all(e['kind'] != 'setup_backup' for e in plan['entries']))
-        self.assertEqual(TOOL.apply_cleanup(plan, self.archive_root, self.setup), 0)
+        self.assertEqual(TOOL.apply_cleanup(plan, self.setup), 0)
         self.assertTrue(all(Path(p).read_bytes() == data for p, data in inventory.items()))
         self.assertEqual(extra.read_bytes(), b'user content')
         self.assertTrue(folder.is_dir())
@@ -121,7 +117,7 @@ class CleanupTests(unittest.TestCase):
             if request['action'] == 'read' else {'Desktop': str(self.desktop)})
         with self.assertRaisesRegex(ValueError, '扫描不完整'):
             self.plan()
-        self.assertFalse(self.archive_root.exists())
+        self.assertEqual(set(self.root.iterdir()), {self.app, self.desktop})
 
     def test_snapshot_change_is_rejected_during_plan(self):
         target = self.link('proxy.lnk', self.app / TOOL.LAUNCHERS[0])
@@ -140,13 +136,14 @@ class CleanupTests(unittest.TestCase):
     def test_dry_run_creates_no_archive_or_mutations(self):
         target = self.link('proxy.lnk', self.app / TOOL.LAUNCHERS[0])
         original = target.read_bytes()
+        before = {str(p): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
         with mock.patch.object(TOOL, 'load_setup', return_value=self.setup):
-            self.assertEqual(TOOL.main(['--dry-run', '--backup-dir', str(self.archive_root)]), 0)
+            self.assertEqual(TOOL.main(['--dry-run']), 0)
         self.assertEqual(target.read_bytes(), original)
-        self.assertFalse(self.archive_root.exists())
+        self.assertEqual({str(p): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}, before)
         self.assertTrue((self.app / TOOL.LAUNCHERS[0]).is_file())
 
-    def test_cleanup_archive_restore_and_second_run(self):
+    def test_cleanup_deletes_only_launchers_without_creating_files(self):
         arguments = '--profile "D:\\中文 路径\\" --title "a & b" --empty ""'
         encoded = base64.b64encode(arguments.encode('utf-8')).decode('ascii')
         target = self.link('代理.lnk', self.app / TOOL.LAUNCHERS[0],
@@ -155,9 +152,12 @@ class CleanupTests(unittest.TestCase):
         old_backup = self.setup_backup(target)
         old_backup_bytes = {str(p): p.read_bytes() for p in old_backup.iterdir()}
         plan = self.plan()
-        original = {e['path']: Path(e['path']).read_bytes() for e in plan['entries']}
+        before_files = {p for p in self.root.rglob('*') if p.is_file()}
+        before_directories = {p for p in self.root.rglob('*') if p.is_dir()}
         direct_bytes = direct.read_bytes()
-        self.assertEqual(TOOL.apply_cleanup(plan, self.archive_root, self.setup), 0)
+        self.setup.atomic_write = mock.Mock(side_effect=AssertionError('Cleanup must not write backup files'))
+        self.setup.Backup = mock.Mock(side_effect=AssertionError('Cleanup must not create a backup'))
+        self.assertEqual(TOOL.apply_cleanup(plan, self.setup), 0)
         self.assertTrue(target.is_file())
         self.assertTrue(all(not (self.app / name).exists() for name in TOOL.LAUNCHERS))
         self.assertEqual(self.links[str(target)]['target'], str(self.app / 'Antigravity.exe'))
@@ -168,27 +168,21 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(direct.read_bytes(), direct_bytes)
         self.assertTrue((self.app / 'Antigravity.exe').is_file())
         self.assertTrue(all(Path(p).read_bytes() == data for p, data in old_backup_bytes.items()))
-        archive = self.latest_archive()
-        manifest = json.loads((archive / 'manifest.json').read_text(encoding='utf-8'))
-        for entry in manifest['entries']:
-            self.assertEqual((archive / entry['blob']).read_bytes(), original[entry['path']])
-            if entry['kind'] == 'launcher':
-                self.assertTrue(entry['removed'])
-            else:
-                self.assertFalse(entry['removed'])
-                self.assertEqual(entry['after_hash'], TOOL.digest(Path(entry['path']).read_bytes()))
-        self.assertEqual(TOOL.apply_cleanup(self.plan(), self.archive_root, self.setup), 0)
-        self.assertEqual(list(self.archive_root.iterdir()), [archive])
-        self.assertEqual(TOOL.restore_cleanup(archive, False, self.setup), 0)
-        self.assertTrue(all(Path(p).read_bytes() == data for p, data in original.items()))
-        self.assertEqual(TOOL.restore_cleanup(archive, False, self.setup), 0)
+        self.assertEqual({p for p in self.root.rglob('*') if p.is_file()},
+                         before_files - {self.app / name for name in TOOL.LAUNCHERS})
+        self.assertEqual({p for p in self.root.rglob('*') if p.is_dir()}, before_directories)
+        after = {str(p): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        self.assertEqual(TOOL.apply_cleanup(self.plan(), self.setup), 0)
+        self.assertEqual({str(p): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}, after)
+        self.setup.atomic_write.assert_not_called()
+        self.setup.Backup.assert_not_called()
 
     def test_changed_file_before_apply_prevents_all_deletion(self):
         target = self.link('proxy.lnk', self.app / TOOL.LAUNCHERS[0])
         plan = self.plan()
         target.write_bytes(b'user edit after preview')
         with self.assertRaisesRegex(ValueError, '预览后'):
-            TOOL.apply_cleanup(plan, self.archive_root, self.setup)
+            TOOL.apply_cleanup(plan, self.setup)
         self.assertEqual(target.read_bytes(), b'user edit after preview')
         self.assertTrue(all((self.app / name).is_file() for name in TOOL.LAUNCHERS))
 
@@ -201,7 +195,7 @@ class CleanupTests(unittest.TestCase):
                 raise PermissionError('fixture locked shortcut')
             return self.bridge(request)
         self.setup.run_powershell.side_effect = bridge
-        self.assertEqual(TOOL.apply_cleanup(plan, self.archive_root, self.setup), 2)
+        self.assertEqual(TOOL.apply_cleanup(plan, self.setup), 2)
         self.assertTrue(target.is_file())
         self.assertEqual(target.read_bytes(), original)
         self.assertTrue(all((self.app / name).is_file() for name in TOOL.LAUNCHERS))
@@ -215,41 +209,35 @@ class CleanupTests(unittest.TestCase):
                 self.link('new.lnk', self.app / TOOL.LAUNCHERS[0])
             return result
         self.setup.run_powershell.side_effect = bridge
-        self.assertEqual(TOOL.apply_cleanup(plan, self.archive_root, self.setup), 2)
+        self.assertEqual(TOOL.apply_cleanup(plan, self.setup), 2)
         self.assertTrue(target.is_file())
         self.assertTrue((self.desktop / 'new.lnk').is_file())
         self.assertTrue(all((self.app / name).is_file() for name in TOOL.LAUNCHERS))
 
-    def test_archive_inside_install_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, '之外'):
-            TOOL.archive_plan(self.plan(), self.app / 'cleanup', self.setup)
-        self.assertFalse((self.app / 'cleanup').exists())
+    def test_removed_backup_and_restore_options_are_rejected(self):
+        before = {str(p): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
+        for option in ('--backup-dir', '--restore'):
+            with self.subTest(option=option), contextlib.redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit) as raised:
+                    TOOL.main([option, str(self.root / 'unused')])
+                self.assertEqual(raised.exception.code, 2)
+        self.assertEqual({str(p): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}, before)
 
-    def test_restore_conflict_is_preflighted(self):
+    def test_launcher_delete_failure_preserves_all_shortcuts(self):
         target = self.link('proxy.lnk', self.app / TOOL.LAUNCHERS[0])
-        self.assertEqual(TOOL.apply_cleanup(self.plan(), self.archive_root, self.setup), 0)
-        target.write_bytes(b'new user shortcut')
-        with self.assertRaisesRegex(ValueError, '内容不同'):
-            TOOL.restore_cleanup(self.latest_archive(), False, self.setup)
-        self.assertEqual(target.read_bytes(), b'new user shortcut')
-        self.assertFalse((self.app / TOOL.LAUNCHERS[0]).exists())
+        plan = self.plan()
+        original_unlink = Path.unlink
 
-    def test_restore_preview_does_not_write(self):
-        self.link('proxy.lnk', self.app / TOOL.LAUNCHERS[0])
-        self.assertEqual(TOOL.apply_cleanup(self.plan(), self.archive_root, self.setup), 0)
-        self.setup.run_powershell.reset_mock()
-        self.assertEqual(TOOL.restore_cleanup(self.latest_archive(), True, self.setup), 0)
-        self.assertFalse((self.app / TOOL.LAUNCHERS[0]).exists())
-        self.setup.run_powershell.assert_not_called()
+        def unlink(path, *args, **kwargs):
+            if path == self.app / TOOL.LAUNCHERS[0]:
+                raise PermissionError('fixture locked launcher')
+            return original_unlink(path, *args, **kwargs)
 
-    def test_restore_rejects_corrupted_archive(self):
-        self.link('proxy.lnk', self.app / TOOL.LAUNCHERS[0])
-        self.assertEqual(TOOL.apply_cleanup(self.plan(), self.archive_root, self.setup), 0)
-        archive = self.latest_archive()
-        next(archive.glob('*.bin')).write_bytes(b'corrupted')
-        with self.assertRaisesRegex(ValueError, '校验失败'):
-            TOOL.restore_cleanup(archive, False, self.setup)
-        self.assertFalse((self.app / TOOL.LAUNCHERS[0]).exists())
+        with mock.patch.object(Path, 'unlink', unlink):
+            self.assertEqual(TOOL.apply_cleanup(plan, self.setup), 2)
+        self.assertTrue(target.is_file())
+        self.assertEqual(self.links[str(target)]['target'], str(self.app / 'Antigravity.exe'))
+        self.assertTrue(all((self.app / name).is_file() for name in TOOL.LAUNCHERS))
 
     def test_strict_original_argument_decode(self):
         original = '--new-window "D:\\中文 a&b" ""'
@@ -275,28 +263,6 @@ class CleanupTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, '未找到 Antigravity.exe'):
             self.plan()
         self.assertTrue(all((self.app / name).is_file() for name in TOOL.LAUNCHERS))
-
-    def test_legacy_v1_deleted_snapshot_can_be_restored(self):
-        shortcut = self.link('旧版删除的入口.lnk', self.app / TOOL.LAUNCHERS[0])
-        old_backup = self.setup_backup(shortcut) / '0000.bin'
-        source_paths = [self.app / name for name in TOOL.LAUNCHERS] + [shortcut, old_backup]
-        original = {str(p): p.read_bytes() for p in source_paths}
-        archive = self.archive_root / 'legacy-v1'
-        archive.mkdir(parents=True)
-        entries = []
-        for number, path in enumerate(source_paths):
-            blob = '{:04d}.bin'.format(number)
-            (archive / blob).write_bytes(original[str(path)])
-            kind = 'launcher' if path.name in TOOL.LAUNCHERS else ('shortcut' if path.suffix == '.lnk' else 'setup_backup')
-            entries.append({'path': str(path), 'kind': kind, 'blob': blob,
-                            'sha256': TOOL.digest(original[str(path)]), 'removed': True})
-            path.unlink()
-        (archive / 'manifest.json').write_text(json.dumps({
-            'format': 'antigravity-proxy-cleanup-v1', 'app_dir': str(self.app), 'entries': entries
-        }), encoding='utf-8')
-        self.assertEqual(TOOL.restore_cleanup(archive, False, self.setup), 0)
-        self.assertTrue(all(Path(path).read_bytes() == value for path, value in original.items()))
-
 
 if __name__ == '__main__':
     unittest.main()

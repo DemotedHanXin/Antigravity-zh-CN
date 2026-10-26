@@ -1,19 +1,16 @@
 # coding: utf-8
-"""将代理快捷方式改回原 EXE，仅清除代理 CMD/PS1；保留快捷方式及旧备份。"""
+"""将代理快捷方式改回原 EXE，直接删除代理 CMD/PS1，不创建备份。"""
 import argparse
 import base64
-from datetime import datetime
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import runpy
-import shutil
 import stat
 import subprocess
 import sys
-import tempfile
 from types import SimpleNamespace
 
 
@@ -52,12 +49,12 @@ def checked_directory(path, parent):
     return resolved
 
 
-def backup_inventory(app_dir, setup):
-    """Read recorded custom shortcuts without modifying or collecting old backups."""
+def recorded_shortcut_paths(app_dir, setup):
+    """Read existing setup records to find custom shortcuts; never write backup data."""
     root = app_dir / SETUP_BACKUPS
     recorded_links = []
     if not root.exists():
-        return [], [], recorded_links
+        return recorded_links
     checked_directory(root, app_dir)
     for folder in sorted(root.iterdir()):
         if not folder.is_dir():
@@ -73,7 +70,7 @@ def backup_inventory(app_dir, setup):
             path = Path(entry['path'])
             if path.is_absolute() and path.suffix.lower() == '.lnk' and path.exists():
                 recorded_links.append(str(path))
-    return [], [], recorded_links
+    return recorded_links
 
 
 def decode_shortcut_arguments(value):
@@ -103,7 +100,7 @@ def scan_proxy_links(roots, recorded_links, app_dir, setup):
 
 def plan_cleanup(app_dir, extra_roots, setup):
     app_dir = Path(app_dir).resolve()
-    _, _, recorded = backup_inventory(app_dir, setup)
+    recorded = recorded_shortcut_paths(app_dir, setup)
     executable = app_dir / 'Antigravity.exe'
     if not executable.is_file():
         raise ValueError('未找到 Antigravity.exe，不能将快捷方式改回源程序。')
@@ -148,57 +145,25 @@ def plan_cleanup(app_dir, extra_roots, setup):
             if path.resolve().parent != app_dir:
                 raise ValueError('代理启动文件不在预期安装目录内。')
             add(path, 'launcher')
-    return {'app_dir': app_dir, 'entries': entries, 'directories': [],
+    return {'app_dir': app_dir, 'entries': entries,
             'roots': roots, 'recorded': recorded, 'scanned': scanned}
 
 
-def save_manifest(folder, manifest, setup):
-    setup.atomic_write(folder / 'manifest.json', json.dumps(manifest, ensure_ascii=False, indent=2).encode('utf-8'))
-
-
-def archive_plan(plan, backup_root, setup):
-    backup_root = Path(backup_root).expanduser().resolve()
-    app_dir = plan['app_dir']
-    try:
-        inside_install = os.path.commonpath([str(backup_root), str(app_dir)]) == str(app_dir)
-    except ValueError:  # Different drives are outside the install directory.
-        inside_install = False
-    if inside_install:
-        raise ValueError('清理备份目录必须放在 Antigravity 安装目录之外。')
-    backup_root.mkdir(parents=True, exist_ok=True)
-    folder = Path(tempfile.mkdtemp(prefix=datetime.now().strftime('%Y%m%d-%H%M%S-'), dir=str(backup_root)))
-    manifest = {'format': 'antigravity-proxy-cleanup-v2', 'app_dir': str(app_dir), 'entries': []}
-    for number, item in enumerate(plan['entries']):
-        source = Path(item['path'])
-        if digest(regular_bytes(source)) != item['sha256']:
-            raise ValueError('文件在预览后已变化，未开始删除：' + str(source))
-        name = '{:04d}.bin'.format(number)
-        shutil.copy2(str(source), str(folder / name))
-        if digest(regular_bytes(folder / name)) != item['sha256']:
-            raise ValueError('备份校验失败，未开始删除：' + str(source))
-        manifest['entries'].append(dict(item, blob=name, removed=False, after_hash=None))
-    save_manifest(folder, manifest, setup)
-    return folder, manifest
-
-
-def apply_cleanup(plan, backup_root, setup):
+def apply_cleanup(plan, setup):
     if not plan['entries']:
         print('[完成] 没有找到代理启动文件或相关快捷方式，无需清理。')
         return 0
-    folder, manifest = archive_plan(plan, backup_root, setup)
-    print('[清理备份] ' + str(folder))
-    print('[还原命令] python "{}" --restore "{}"'.format(Path(__file__).name, folder))
     # Check the whole snapshot before changing shortcuts or removing launchers.
-    for entry in manifest['entries']:
+    for entry in plan['entries']:
         if digest(regular_bytes(entry['path'])) != entry['sha256']:
-            raise ValueError('文件在备份后已变化，未开始删除：' + entry['path'])
+            raise ValueError('文件在预览后已变化，未开始修改或删除：' + entry['path'])
     for kind in ('shortcut', 'launcher'):
         if kind == 'launcher':
             remaining, errors, _ = scan_proxy_links(plan['roots'], plan['recorded'], plan['app_dir'], setup)
             if remaining or errors:
                 print('[停止] 仍有代理快捷方式或扫描错误；启动文件已保留，请重新预览。')
                 return 2
-        for entry in manifest['entries']:
+        for entry in plan['entries']:
             if entry['kind'] != kind:
                 continue
             path = Path(entry['path'])
@@ -207,79 +172,32 @@ def apply_cleanup(plan, backup_root, setup):
                     raise ValueError('文件已被修改，保留当前内容。')
                 if kind == 'shortcut':
                     setup.run_powershell(dict(entry['replacement'], action='write', path=str(path), before_hash=entry['sha256']))
-                    entry['after_hash'] = digest(regular_bytes(path))
                     print('[已改回 EXE] ' + str(path))
                 else:
                     # Only the two exact launcher files can enter this branch.
                     if path.name not in LAUNCHERS or path.resolve().parent != plan['app_dir']:
                         raise ValueError('待删除文件不属于本次安装的代理启动文件。')
                     path.unlink()
-                    entry['removed'] = True
                     print('[已删除] ' + str(path))
-                save_manifest(folder, manifest, setup)
             except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
-                print('[停止] {}：{}；后续文件已保留，可用上方备份恢复。'.format(path, error))
+                print('[停止] {}：{}；后续文件已保留，处理问题后可重新运行。'.format(path, error))
                 return 2
     setup.run_powershell({'action': 'notify'})
     print('[完成] 快捷方式已保留并改回 Antigravity.exe，两个代理启动文件已清理。')
-    print('[说明] 软件、汉化文件和旧修复备份均保留；后续启动不再自动注入代理。')
-    return 0
-
-
-def restore_cleanup(folder, preview, setup):
-    folder = Path(folder).resolve()
-    manifest = json.loads(regular_bytes(folder / 'manifest.json').decode('utf-8'))
-    version = manifest.get('format')
-    if version not in ('antigravity-proxy-cleanup-v1', 'antigravity-proxy-cleanup-v2'):
-        raise ValueError('这不是本清理脚本生成的备份。')
-    operations = []
-    for entry in manifest['entries']:
-        if not re.fullmatch(r'[0-9]+\.bin', entry['blob']):
-            raise ValueError('备份文件名不合法。')
-        saved = regular_bytes(folder / entry['blob'])
-        if digest(saved) != entry['sha256']:
-            raise ValueError('备份校验失败。')
-        target = Path(entry['path'])
-        if not target.is_absolute():
-            raise ValueError('还原路径必须是绝对路径。')
-        current_hash = digest(regular_bytes(target)) if target.exists() else None
-        if current_hash == entry['sha256']:
-            continue
-        if current_hash is not None and not (
-            version == 'antigravity-proxy-cleanup-v2' and entry['kind'] == 'shortcut'
-            and current_hash == entry.get('after_hash')
-        ):
-            raise ValueError('目标已存在且内容不同，未执行还原：' + str(target))
-        operations.append((target, saved, entry['kind'], current_hash))
-    # Restore launchers before shortcuts, so a partial restore leaves no dangling link.
-    operations.sort(key=lambda item: {'launcher': 0, 'setup_backup': 1, 'shortcut': 2}[item[2]])
-    for target, saved, _, expected_hash in operations:
-        print(('[预览还原] ' if preview else '[还原] ') + str(target))
-        if not preview:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            current_hash = digest(regular_bytes(target)) if target.exists() else None
-            if current_hash != expected_hash:
-                raise ValueError('还原期间目标被其他程序修改，停止：' + str(target))
-            setup.atomic_write(target, saved)
-    if not preview:
-        setup.run_powershell({'action': 'notify'})
+    print('[说明] 直接删除，不进入回收站，不创建备份；需要代理启动时请重新运行 Setup-Proxy-Shortcuts.py。')
     return 0
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='保留快捷方式并改回 Antigravity.exe，仅删除代理 CMD/PS1；旧备份保留，改动可还原。')
+    parser = argparse.ArgumentParser(description='保留快捷方式并改回 Antigravity.exe，直接删除代理 CMD/PS1，不创建备份；需要时运行 Setup-Proxy-Shortcuts.py 重新创建。')
     parser.add_argument('--app-dir', help='包含 Antigravity.exe 的安装目录')
     parser.add_argument('--scan-root', action='append', default=[], help='额外递归扫描目录，可重复指定')
     parser.add_argument('--dry-run', action='store_true', help='仅预览，不写入或删除文件')
-    parser.add_argument('--backup-dir', help='清理归档的存放根目录，必须在软件安装目录之外')
-    parser.add_argument('--restore', help='还原本清理脚本输出的备份目录')
     args = parser.parse_args(argv)
     if sys.platform != 'win32':
         parser.error('此脚本仅支持 Windows。')
     try:
         setup = load_setup()
-        if args.restore:
-            return restore_cleanup(args.restore, args.dry_run, setup)
         app_dir = setup.discover_install(args.app_dir)
         plan = plan_cleanup(app_dir, args.scan_root, setup)
         print('[安装目录] ' + str(app_dir))
@@ -289,10 +207,7 @@ def main(argv=None):
         if args.dry_run:
             print('[预览结束] 未写入或删除文件。')
             return 0
-        if not args.backup_dir and not os.environ.get('LOCALAPPDATA'):
-            raise ValueError('无法确定备份位置，请用 --backup-dir 指定。')
-        backup_root = args.backup_dir or str(Path(os.environ['LOCALAPPDATA']) / 'AntigravityProxyCleanupBackups')
-        return apply_cleanup(plan, backup_root, setup)
+        return apply_cleanup(plan, setup)
     except (OSError, ValueError, RuntimeError, KeyError, subprocess.SubprocessError) as error:
         print('[错误] ' + str(error))
         return 1
