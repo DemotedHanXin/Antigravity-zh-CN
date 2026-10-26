@@ -64,6 +64,46 @@ python Antigravity-Patcher.py
 
 Download `Source code (zip)` or `Source code (tar.gz)` from [Releases page](https://github.com/MIMICTE/Antigravity-zh-CN/releases/latest), extract and run `Antigravity-Patcher.py`.
 
+### Windows Proxy Shortcut Repair
+
+If Antigravity remains on the loading screen while the Windows system proxy is enabled, run the standalone, single-file [Setup-Proxy-Shortcuts.py](Setup-Proxy-Shortcuts.py). It uses the Python standard library and built-in Windows PowerShell, with **no pip dependencies**:
+
+```powershell
+python Setup-Proxy-Shortcuts.py
+```
+
+The script deploys `Antigravity-Proxy.cmd` and `Antigravity-Proxy.ps1` into the app installation directory. It scans `.lnk` files in the current-user and shared Desktop, Start Menu and Startup folders, plus Quick Launch / taskbar folders, and repairs matching Antigravity shortcuts while preserving their original arguments. It backs up files before changes and prints the backup directory and restore command. Each subsequent launch through a repaired shortcut reads the current Windows system proxy and applies it only to the app process; disabling the system proxy clears inherited proxy variables.
+
+Common options:
+
+```powershell
+# Preview without changing files
+python Setup-Proxy-Shortcuts.py --dry-run
+# Select the directory containing Antigravity.exe and scan additional folders
+python Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts" --scan-root "E:\Launchers"
+# Replace BACKUP with the full backup directory printed by the script
+python Setup-Proxy-Shortcuts.py --restore "BACKUP"
+```
+
+- Repeat `--scan-root` for custom shortcut directories. Some Windows pinned items are not stored as `.lnk` files and cannot be repaired directly by this script.
+- PAC scripts are unsupported and produce an explicit error. Use a system proxy with an HTTP / mixed port, or disable the Windows proxy script setting when using TUN.
+- The script does not restart a running app. Fully exit Antigravity, then launch it through a repaired shortcut for the settings to take effect.
+- Run as a regular user first. Administrator access is only needed if shared folders, such as the public Desktop or Start Menu, report insufficient permissions.
+
+### Remove proxy launchers and restore EXE shortcuts
+
+Keep [Cleanup-Proxy-Shortcuts.py](Cleanup-Proxy-Shortcuts.py) beside `Setup-Proxy-Shortcuts.py`. It removes the proxy launch setup while retaining application shortcuts. No additional packages are required.
+
+```powershell
+python Cleanup-Proxy-Shortcuts.py --dry-run
+python Cleanup-Proxy-Shortcuts.py
+python Cleanup-Proxy-Shortcuts.py --restore "BACKUP"
+```
+
+Cleanup **keeps each scanned `.lnk` targeting `Antigravity-Proxy.cmd` or `Antigravity-Proxy.ps1` and redirects it to `Antigravity.exe` in the same installation directory**. It decodes the original application arguments, preserves the icon and working directory, and restores normal window display. Only after all matching shortcuts have been handled does it delete the two installed proxy launcher files. Direct EXE shortcuts, other applications and the old `antigravity-proxy-backups` directory are preserved. Use `--app-dir` or repeat `--scan-root` for custom locations; recorded shortcut paths in setup backups are also checked. Unrecognized launcher arguments cause an error and are left unchanged.
+
+Before changes, files are verified and archived under `%LOCALAPPDATA%\AntigravityProxyCleanupBackups`. Use `--backup-dir` to choose another location outside the application directory. `--restore` undoes cleanup and restores the archived proxy launch setup; it also supports legacy v1 archives to recover files and shortcuts deleted by that version. Restore stops if a target has subsequently changed. Application files, localization, global proxy settings and running processes are left untouched. The restored EXE shortcuts no longer inject proxy settings. Windows pins that are not stored as `.lnk` files are outside this script's scope.
+
 ## 💡 Technical Approach
 
 This project leverages Electron framework mechanisms:

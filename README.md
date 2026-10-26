@@ -64,6 +64,49 @@ python Antigravity-Patcher.py
 
 从 [Releases 页面](https://github.com/MIMICTE/Antigravity-zh-CN/releases/latest) 下载 `Source code (zip)` 或 `Source code (tar.gz)`，解压后运行 `Antigravity-Patcher.py`。
 
+### Windows 代理快捷方式修复
+
+如果 Windows 系统代理已开启，但 Antigravity 启动后卡在加载界面，可运行独立的单文件脚本 [Setup-Proxy-Shortcuts.py](Setup-Proxy-Shortcuts.py)。它使用 Python 标准库和 Windows 自带的 PowerShell，**无需安装 pip 依赖**：
+
+```powershell
+python Setup-Proxy-Shortcuts.py
+```
+
+脚本会在软件安装目录部署 `Antigravity-Proxy.cmd` 和 `Antigravity-Proxy.ps1`，扫描当前用户及公共桌面、开始菜单、启动项目，以及 Quick Launch / 任务栏目录中的 `.lnk`，修复匹配的 Antigravity 快捷方式并保留原有启动参数。改动前会备份文件，完成后输出备份目录及还原命令。之后每次通过修复后的快捷方式启动，都会读取当时的 Windows 系统代理，仅为本次软件进程配置代理；关闭系统代理时会清除继承的代理变量。
+
+常用选项：
+
+```powershell
+# 只预览，不修改文件
+python Setup-Proxy-Shortcuts.py --dry-run
+# 指定包含 Antigravity.exe 的安装目录，并额外扫描多个自定义目录
+python Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts" --scan-root "E:\Launchers"
+# 将 BACKUP 替换为脚本输出的完整备份目录
+python Setup-Proxy-Shortcuts.py --restore "BACKUP"
+```
+
+- `--scan-root` 可重复使用。部分 Windows 固定项不以 `.lnk` 保存，无法由此脚本直接修复；自定义快捷方式目录需要用此选项补充。
+- 不支持 PAC 自动代理脚本，检测到后会明确报错；请使用 HTTP / 混合端口的系统代理，或关闭 Windows 代理脚本后使用 TUN。
+- 脚本不会重启正在运行的软件；请完全退出 Antigravity，再从修复后的快捷方式启动，使设置生效。
+- 默认以普通用户运行；仅在公共桌面、公共开始菜单等共享目录提示权限不足时，再以管理员身份运行。
+
+### 移除代理启动器并恢复 EXE 快捷方式
+
+运行 [Cleanup-Proxy-Shortcuts.py](Cleanup-Proxy-Shortcuts.py) 可退出代理启动方案，同时保留应用快捷方式。请将它与 `Setup-Proxy-Shortcuts.py` 放在同一目录，无需额外安装依赖。
+
+```powershell
+# 先预览将改回 EXE 的快捷方式和待删除的启动文件
+python Cleanup-Proxy-Shortcuts.py --dry-run
+# 执行清理
+python Cleanup-Proxy-Shortcuts.py
+# 撤销清理，恢复归档中的代理启动文件和快捷方式
+python Cleanup-Proxy-Shortcuts.py --restore "BACKUP"
+```
+
+脚本将所有扫描到的、直接指向 `Antigravity-Proxy.cmd` 或 `Antigravity-Proxy.ps1` 的 `.lnk` **保留并改回同一安装目录中的 `Antigravity.exe`**，恢复编码前的原始启动参数、保留图标和工作目录，并改为正常显示窗口。只有在相关快捷方式全部处理成功后，才删除安装目录里的这两个代理启动文件。原有 EXE 快捷方式、其他软件入口和 `antigravity-proxy-backups` 旧修复备份均保留。支持 `--app-dir` 和可重复的 `--scan-root`，也会检查旧修复记录中的自定义快捷方式；不识别的启动器参数会报错并保留原状。
+
+改动前会校验并归档到 `%LOCALAPPDATA%\AntigravityProxyCleanupBackups`，可用 `--backup-dir` 指定安装目录之外的位置。`--restore` 可撤销本次清理，也兼容旧版 v1 清理归档，可找回旧版清理时删除的文件及快捷方式；若目标后来又被修改，会停止还原以保护新内容。脚本不会修改软件本体、汉化文件或全局代理，也不会结束正在运行的软件。清理后的快捷方式直接启动 EXE，不再自动注入代理。部分 Windows 固定项不是 `.lnk`，不属于脚本处理范围。
+
 ## 💡 技术原理
 
 本项目利用 Electron 框架机制实现汉化：

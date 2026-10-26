@@ -58,10 +58,22 @@ def restore():
             if sys.platform == "win32":
                 exe_path = os.path.join(APP_DIR, "Antigravity.exe")
                 if os.path.exists(exe_path):
+                    launch_args = [exe_path]
+                    proxy_launcher = os.path.join(APP_DIR, "Antigravity-Proxy.ps1")
+                    if os.path.isfile(proxy_launcher):
+                        powershell_path = os.path.join(
+                            os.environ.get("SystemRoot", r"C:\Windows"),
+                            "System32", "WindowsPowerShell", "v1.0", "powershell.exe"
+                        )
+                        launch_args = [
+                            powershell_path, "-NoLogo", "-NoProfile", "-NonInteractive",
+                            "-File", proxy_launcher
+                        ]
+                        print("[启动] 使用代理启动器 Antigravity-Proxy.ps1。")
                     DETACHED_PROCESS = 0x00000008
                     CREATE_NEW_PROCESS_GROUP = 0x00000200
                     subprocess.Popen(
-                        [exe_path],
+                        launch_args,
                         stdin=subprocess.DEVNULL,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
