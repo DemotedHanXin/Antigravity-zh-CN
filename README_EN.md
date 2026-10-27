@@ -6,7 +6,19 @@ Chinese UI localization, restoration, and Windows proxy launcher / shortcut mana
 
 This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN). Translation rules target the v2.21.1 layout; text coverage and compatibility with other versions are not guaranteed. These changes apply to **the Python source in this repository**. Previously published executables need rebuilding to include them.
 
-## New features and repairs
+## DragonGirl development status — read first
+
+**Optional AI translation components are present, but no real-application compatibility profile has been validated or shipped.** The registry currently has an empty `profiles` list. Actual installations retain built-in dictionary localization; entering a key does not activate an unverified bridge.
+
+- Independent settings GUI: `python Translation-Settings.py`; requires Tk and a desktop display.
+- Order: built-in dictionary/rules → personal dictionary → AI. AI and automatic translation persistence are off by default; native menus remain dictionary-only.
+- Separate OpenAI Responses, Gemini generateContent, Claude Messages, and custom OpenAI-compatible Chat Completions adapters.
+- Keys are stored **in plaintext** in the user directory with an explicit save warning. Repatching/restoration do not delete settings or the personal dictionary.
+- Connection testing is an explicit, potentially billable action requiring confirmation and external Node. Success does not establish application compatibility.
+
+See the [DragonGirl guide](docs/DRAGONGIRL.md) (Chinese) for privacy boundaries, read-only compatibility inspection, packaging, and outstanding gates. **Native Windows/macOS bridge, GUI and frozen-package acceptance are still required.**
+
+## Existing features and repairs
 
 - Validate ASAR structure, paths, application entry points and external files from `app.asar.unpacked`. Extract and translate in a staging directory before switching the installed code.
 - Refuse restoration without a valid original archive, keeping a potentially sole working `resources/app`. Report deletion failures instead of silently claiming success.
@@ -24,9 +36,10 @@ See [Project status and code guide](PROJECT_STATUS.md) (Chinese) for the impleme
 | --- | --- |
 | Localization / restoration | Python 3.8+; Windows and macOS path / process branches |
 | Proxy and shortcuts | Windows, Python 3.8+, built-in Windows PowerShell and WScript.Shell |
-| Validation for this revision | Windows with Python 3.11; native macOS and other app versions still need validation |
+| Historical validation | Earlier Windows/Python 3.11 work is recorded in PROJECT_STATUS; not DragonGirl real-app acceptance |
+| DragonGirl development tests | Python and Node 22+; isolated simulations do not prove real-app compatibility |
 
-Download the complete repository. Keep `antigravity_common.py` beside `Antigravity-Patcher.py` and `Restore.py`. Keep `Setup-Proxy-Shortcuts.py` beside `Cleanup-Proxy-Shortcuts.py`.
+Download the complete repository, including `translation_integration.py`, `translation_config.py`, and all of `localization_runtime/`; distribute the new GUI/inspection tools with these resources. Keep `antigravity_common.py` beside `Antigravity-Patcher.py` and `Restore.py`. Keep `Setup-Proxy-Shortcuts.py` beside `Cleanup-Proxy-Shortcuts.py`.
 
 ```powershell
 git clone https://github.com/DemotedHanXin/Antigravity-zh-CN.git
@@ -118,6 +131,7 @@ New Setup versions store custom scan roots in a comment inside the existing PS1.
 
 ```powershell
 python -B -m unittest discover -s tests -v
+node --test tests/js/*.test.cjs
 ```
 
 Tests use isolated directories and mocked process control. They cover archive validation, external dependencies, localization / restore failure handling, shortcut arguments, scan roots and backup-free proxy operations. Do not run mutation tests against a working installation.

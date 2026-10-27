@@ -5,40 +5,57 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build-mac:
-    runs-on: macos-latest
+    # Build with a native interpreter for each architecture; this is not cross-compilation.
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        arch: [x86_64, arm64]
-    
+        include:
+          - os: macos-15-intel
+            arch: x86_64
+          - os: macos-15
+            arch: arm64
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pyinstaller
-        
-    - name: Build with PyInstaller (Mac ${{ matrix.arch }})
-      run: |
-        pyinstaller -F --target-arch ${{ matrix.arch }} Antigravity-Patcher.py
-        pyinstaller -F --target-arch ${{ matrix.arch }} Restore.py
-        
-    - name: Rename binaries
-      run: |
-        mv dist/Antigravity-Patcher dist/Antigravity-Patcher-macOS-${{ matrix.arch }}
-        mv dist/Restore dist/Restore-macOS-${{ matrix.arch }}
-        
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: macos-${{ matrix.arch }}-binaries
-        path: |
-          dist/Antigravity-Patcher-macOS-${{ matrix.arch }}
-          dist/Restore-macOS-${{ matrix.arch }}
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Set up Node for offline contract tests
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Test isolated fixtures (no app installation or API credentials)
+        run: |
+          python -B -m unittest discover -s tests -v
+          node --test tests/js/*.test.cjs
+      - name: Install pinned build dependency
+        run: python -m pip install pyinstaller==6.16.0
+      - name: Build with runtime resources
+        run: |
+          python -c "import platform; assert platform.machine() == '${{ matrix.arch }}', platform.machine()"
+          python -m PyInstaller --noconfirm -F --target-arch ${{ matrix.arch }} --add-data "localization_runtime:localization_runtime" Antigravity-Patcher.py
+          python -m PyInstaller --noconfirm -F --target-arch ${{ matrix.arch }} Restore.py
+          python -m PyInstaller --noconfirm -F --target-arch ${{ matrix.arch }} --add-data "localization_runtime:localization_runtime" Translation-Settings.py
+          python -m PyInstaller --noconfirm -F --target-arch ${{ matrix.arch }} --add-data "localization_runtime:localization_runtime" Inspect-Translation-Compatibility.py
+      - name: CLI smoke checks (read-only help, not native app acceptance)
+        run: |
+          dist/Antigravity-Patcher --help
+          dist/Restore --help
+          dist/Inspect-Translation-Compatibility --help
+      - name: Rename binaries
+        run: |
+          for tool in Antigravity-Patcher Restore Translation-Settings Inspect-Translation-Compatibility; do
+            mv "dist/$tool" "dist/$tool-macOS-${{ matrix.arch }}"
+          done
+      - name: Upload unverified build artifacts (not a Release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}-binaries
+          path: dist/*-macOS-${{ matrix.arch }}
+          if-no-files-found: error

@@ -6,7 +6,19 @@
 
 本分支基于 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN) 扩展。翻译规则以 v2.21.1 的文件结构为基础，不保证所有版本的文本覆盖率。本次修复针对仓库中的 **Python 源码**；旧版 Release 中的可执行程序需要重新打包后才包含这些修复。
 
-## 本次新增与修复
+## DragonGirl 开发版：请先了解状态
+
+**本分支新增了可选 AI 补译组件，但尚未提供真实应用验证过的兼容 profile。** 当前 `profiles` 为空，真实应用仍使用原有内置词典汉化；不会仅因填写密钥就开始 AI 补译。
+
+- 独立 GUI：`python Translation-Settings.py`，需要带 Tk 的 Python/桌面环境。
+- 内置词典/规则 → 个人词典 → AI；AI 和自动保存译文默认关闭，原生菜单不接 AI。
+- OpenAI Responses、Gemini generateContent、Claude Messages 及自定义 OpenAI 兼容 Chat Completions 四种协议。
+- 密钥明文保存在用户目录，保存前明确提示；配置/个人词典不会随汉化更新或还原删除。
+- 连接测试为单独、需确认的可能计费操作，需要外部 Node；通过不表示真实应用桥接可用。
+
+完整使用方式、隐私边界、只读兼容检查、打包与尚未验证项目见 [DragonGirl 说明](docs/DRAGONGIRL.md)。**Windows/macOS 真机桥接及 GUI/冻结包仍需验收，不是已经发布的兼容版本。**
+
+## 原有功能与修复
 
 - **汉化前验证安装完整性**：检查 ASAR 结构、文件路径和应用入口，补齐 `app.asar.unpacked` 中的外置依赖；先在临时目录完成解包与注入，验证通过后才切换。
 - **保护可运行代码**：缺少或损坏原版归档时停止还原，不再把唯一的 `resources/app` 删除；目录删除失败会报告错误，不再静默提示成功。
@@ -24,9 +36,10 @@
 | --- | --- |
 | 汉化、还原 | Python 3.8+；Windows 或 macOS 的路径与进程处理分支 |
 | 代理启动与快捷方式 | Windows、Python 3.8+、系统自带 Windows PowerShell 与 WScript.Shell |
-| 本次验证环境 | Windows、Python 3.11；macOS 和其他 Antigravity 版本仍需实际验证 |
+| 原有修复记录 | 历史 Windows/Python 3.11 验证见 PROJECT_STATUS；不代表 DragonGirl 真机验证 |
+| DragonGirl 开发测试 | Python、Node 22+；隔离模拟不等于真实应用兼容 |
 
-下载完整仓库，保留脚本依赖：`Antigravity-Patcher.py`、`Restore.py` 依赖同目录的 `antigravity_common.py`；`Cleanup-Proxy-Shortcuts.py` 依赖同目录的 `Setup-Proxy-Shortcuts.py`。
+下载完整仓库，并保留 `translation_integration.py`、`translation_config.py` 和完整 `localization_runtime/`；新 GUI/检查工具与这些模块一起分发。原有脚本依赖：`Antigravity-Patcher.py`、`Restore.py` 依赖同目录的 `antigravity_common.py`；`Cleanup-Proxy-Shortcuts.py` 依赖同目录的 `Setup-Proxy-Shortcuts.py`。
 
 ```powershell
 git clone https://github.com/DemotedHanXin/Antigravity-zh-CN.git
@@ -123,6 +136,7 @@ python Setup-Proxy-Shortcuts.py
 
 ```powershell
 python -B -m unittest discover -s tests -v
+node --test tests/js/*.test.cjs
 ```
 
 测试使用隔离目录及模拟的进程控制，覆盖归档校验、外置依赖、汉化／还原失败保护、快捷方式参数、扫描目录和不产生代理备份等行为，不应直接对正在使用的安装运行变更测试。
