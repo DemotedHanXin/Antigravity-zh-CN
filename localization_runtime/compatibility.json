@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "profiles": [],
+  "note": "No real application build has been validated. Unknown builds retain dictionary-only localization. Never add a profile from hashes alone."
+}

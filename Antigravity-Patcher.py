@@ -6,6 +6,8 @@ import subprocess
 import sys
 import tempfile
 
+from translation_integration import select_profile, prepare_bridge, preload_extension
+
 from antigravity_common import (
     discover_install, extract_asar, launch_application, remove_tree,
     resources_dir, stop_application, validate_extracted_app,
@@ -900,7 +902,13 @@ REQUIRED_PATCH_FILES = ('dist/preload.js', 'dist/menu.js', 'dist/tray.js')
 
 
 def _inject(stage):
-    append_once(stage / 'dist/preload.js', DOM_TRANSLATOR_INJECTION,
+    # Match pristine, validated stage bytes before any localization changes.
+    profile = select_profile(stage)
+    dom_injection = DOM_TRANSLATOR_INJECTION
+    if profile is not None:
+        dom_injection = dom_injection.replace('  const observer = new MutationObserver',
+            preload_extension(profile) + '\n  const observer = new MutationObserver', 1)
+    append_once(stage / 'dist/preload.js', dom_injection,
                 'Antigravity Chinese Localization Engine', 'Web UI Injection')
     append_once(stage / 'dist/menu.js', MENU_TRANSLATOR_INJECTION,
                 'Antigravity Chinese Localization Engine - Menu', 'Menu Translator Injection')
@@ -911,6 +919,11 @@ def _inject(stage):
         content = loading.read_text(encoding='utf-8')
         loading.write_text(content.replace('>Loading Antigravity<', '>正在加载 Antigravity<'),
                            encoding='utf-8')
+    if profile is not None:
+        prepare_bridge(stage, profile)
+        print('[状态] 已安装经过精确指纹验证的 DragonGirl 桥接；AI 仍由用户配置控制。')
+    else:
+        print('[状态] 当前应用尚无已验证的 AI 桥接配置；仅启用现有词典汉化，不外发文案。')
 
 
 def _stamp(path):
