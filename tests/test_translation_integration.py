@@ -1,5 +1,7 @@
 """Bridge integration tests use fake app bytes only, never a real installation."""
 import copy
+import contextlib
+import io
 import hashlib
 import importlib.util
 import json
@@ -22,14 +24,19 @@ SPEC.loader.exec_module(PATCHER)
 
 class BridgePackagingTests(unittest.TestCase):
     def setUp(self):
+        # Like the existing localization suite, capture human-readable CLI output.
+        # These fixture tests check file state, not the host console code page.
+        output = contextlib.redirect_stdout(io.StringIO())
+        output.__enter__()
+        self.addCleanup(output.__exit__, None, None, None)
         self.temp = tempfile.TemporaryDirectory(prefix='dragongirl-fixture-')
         self.addCleanup(self.temp.cleanup)
         self.stage = Path(self.temp.name)
         (self.stage / 'dist').mkdir()
         self.package = {'name': 'fixture-only', 'version': '0.0.0', 'main': 'dist/main.js'}
-        (self.stage / 'package.json').write_text(json.dumps(self.package))
+        (self.stage / 'package.json').write_text(json.dumps(self.package), encoding='utf-8')
         for name in ('main.js', 'preload.js', 'menu.js', 'tray.js', 'ui.js'):
-            (self.stage / 'dist' / name).write_text('// isolated ' + name)
+            (self.stage / 'dist' / name).write_text('// isolated ' + name, encoding='utf-8')
         report = bridge.fingerprints(self.stage, ['dist/ui.js'])
         self.profile = dict(report, id='fixture-only', schemaVersion=1, verified=True,
                             preload='dist/preload.js', uiFiles=['dist/ui.js'],
@@ -48,7 +55,7 @@ class BridgePackagingTests(unittest.TestCase):
 
     def test_exact_profile_and_ui_digest_required(self):
         self.assertEqual(bridge.select_profile(self.stage, [self.profile])['id'], 'fixture-only')
-        (self.stage / 'dist/ui.js').write_text('// different version')
+        (self.stage / 'dist/ui.js').write_text('// different version', encoding='utf-8')
         self.assertIsNone(bridge.select_profile(self.stage, [self.profile]))
 
     def test_symlink_and_traversal_rejected(self):
@@ -71,25 +78,25 @@ class BridgePackagingTests(unittest.TestCase):
 
     def test_unknown_app_legacy_only_preserves_main(self):
         PATCHER._inject(self.stage)
-        self.assertEqual(json.loads((self.stage / 'package.json').read_text())['main'], 'dist/main.js')
+        self.assertEqual(json.loads((self.stage / 'package.json').read_text(encoding='utf-8'))['main'], 'dist/main.js')
         self.assertFalse((self.stage / '.dragongirl').exists())
-        self.assertNotIn('dragongirl:v1', (self.stage / 'dist/preload.js').read_text())
+        self.assertNotIn('dragongirl:v1', (self.stage / 'dist/preload.js').read_text(encoding='utf-8'))
 
     def test_reviewed_fixture_packages_runtime_and_private_preload(self):
         with mock.patch.object(PATCHER, 'select_profile', return_value=self.profile):
             PATCHER._inject(self.stage)
-        self.assertEqual(json.loads((self.stage / 'package.json').read_text())['main'], '.dragongirl/bootstrap.cjs')
-        self.assertEqual((self.stage / 'dist/main.js').read_text(), '// isolated main.js')
+        self.assertEqual(json.loads((self.stage / 'package.json').read_text(encoding='utf-8'))['main'], '.dragongirl/bootstrap.cjs')
+        self.assertEqual((self.stage / 'dist/main.js').read_text(encoding='utf-8'), '// isolated main.js')
         for name in bridge.RUNTIME_FILES:
             self.assertTrue((self.stage / '.dragongirl' / name).is_file())
-        preload = (self.stage / 'dist/preload.js').read_text()
+        preload = (self.stage / 'dist/preload.js').read_text(encoding='utf-8')
         self.assertIn('dragongirl:v1:translate', preload)
         self.assertNotIn('exposeInMainWorld', preload)
         self.assertIn('value !== text', preload)
 
     @unittest.skipUnless(shutil.which('node'), 'Node required for isolated bootstrap execution')
     def test_packaged_bootstrap_keeps_original_entry_when_electron_unavailable(self):
-        (self.stage / 'dist/main.js').write_text('process.stdout.write("ORIGINAL_FIXTURE_LOADED");')
+        (self.stage / 'dist/main.js').write_text('process.stdout.write("ORIGINAL_FIXTURE_LOADED");', encoding='utf-8')
         bridge.prepare_bridge(self.stage, self.profile)
         result = subprocess.run([shutil.which('node'), str(self.stage / '.dragongirl/bootstrap.cjs')],
                                 capture_output=True, text=True, check=True, timeout=10)
@@ -99,10 +106,10 @@ class BridgePackagingTests(unittest.TestCase):
     def test_existing_runtime_path_never_overwritten(self):
         (self.stage / '.dragongirl').mkdir()
         sentinel = self.stage / '.dragongirl/sentinel'
-        sentinel.write_text('keep')
+        sentinel.write_text('keep', encoding='utf-8')
         with self.assertRaises(ValueError):
             bridge.prepare_bridge(self.stage, self.profile)
-        self.assertEqual(sentinel.read_text(), 'keep')
+        self.assertEqual(sentinel.read_text(encoding='utf-8'), 'keep')
 
     def test_full_fixture_patch_repeat_restore_preserves_user_data(self):
         restore_spec = importlib.util.spec_from_file_location('bridge_restore', ROOT / 'Restore.py')
@@ -120,8 +127,8 @@ class BridgePackagingTests(unittest.TestCase):
         make_archive(archive, files=files)
         user_data = self.stage / 'separate-user-data'
         user_data.mkdir()
-        (user_data / 'config.json').write_text('{"enabled":false}')
-        (user_data / 'personal-dictionary.json').write_text('{"sentinel":"保留"}')
+        (user_data / 'config.json').write_text('{"enabled":false}', encoding='utf-8')
+        (user_data / 'personal-dictionary.json').write_text('{"sentinel":"保留"}', encoding='utf-8')
         before = {p.name: p.read_bytes() for p in user_data.iterdir()}
         with mock.patch.object(common.sys, 'platform', 'win32'), \
                 mock.patch.object(PATCHER, 'stop_application'), \
@@ -129,7 +136,7 @@ class BridgePackagingTests(unittest.TestCase):
                 mock.patch.object(PATCHER, 'select_profile', side_effect=lambda stage: bridge.select_profile(stage, [self.profile])):
             PATCHER.apply_patch(installation, no_launch=True)
             PATCHER.apply_patch(installation, no_launch=True)
-            self.assertEqual(json.loads((resources / 'app/package.json').read_text())['main'], '.dragongirl/bootstrap.cjs')
+            self.assertEqual(json.loads((resources / 'app/package.json').read_text(encoding='utf-8'))['main'], '.dragongirl/bootstrap.cjs')
             self.assertEqual(restore.restore(installation, launch=False), 0)
         self.assertTrue(archive.exists())
         self.assertFalse((resources / 'app').exists())
@@ -141,7 +148,7 @@ class BridgePackagingTests(unittest.TestCase):
         with mock.patch.object(bridge, 'resource_root', return_value=empty):
             with self.assertRaises(ValueError):
                 bridge.prepare_bridge(self.stage, self.profile)
-        self.assertEqual(json.loads((self.stage / 'package.json').read_text()), self.package)
+        self.assertEqual(json.loads((self.stage / 'package.json').read_text(encoding='utf-8')), self.package)
 
 
 if __name__ == '__main__':

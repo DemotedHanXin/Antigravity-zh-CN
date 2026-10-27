@@ -36,12 +36,18 @@ class TranslationConfigTests(unittest.TestCase):
         self.assertFalse(self.directory.exists())
 
     def test_platform_paths(self):
-        self.assertEqual(config.user_data_dir('win32', {'APPDATA': '/roaming'}, '/home'), Path('/roaming/Antigravity-zh-CN'))
-        self.assertEqual(config.user_data_dir('darwin', {}, '/home/user'), Path('/home/user/Library/Application Support/Antigravity-zh-CN'))
-        self.assertEqual(config.user_data_dir('linux', {}, '/home/user'), Path('/home/user/.config/Antigravity-zh-CN'))
-        self.assertEqual(config.user_data_dir('linux', {'XDG_CONFIG_HOME': '/xdg'}, '/home'), Path('/xdg/Antigravity-zh-CN'))
+        # Use absolute fixture paths native to the host, including a drive on Windows.
+        home = self.directory / 'home'
+        roaming = self.directory / 'roaming'
+        xdg = self.directory / 'xdg'
+        self.assertEqual(config.user_data_dir('win32', {'APPDATA': str(roaming)}, home), roaming / 'Antigravity-zh-CN')
+        self.assertEqual(config.user_data_dir('darwin', {}, home), home / 'Library/Application Support/Antigravity-zh-CN')
+        self.assertEqual(config.user_data_dir('linux', {}, home), home / '.config/Antigravity-zh-CN')
+        self.assertEqual(config.user_data_dir('linux', {'XDG_CONFIG_HOME': str(xdg)}, home), xdg / 'Antigravity-zh-CN')
         with self.assertRaises(config.DataError):
-            config.user_data_dir('win32', {}, '/home')
+            config.user_data_dir('win32', {}, home)
+        with self.assertRaises(config.DataError):
+            config.user_data_dir('win32', {'APPDATA': 'relative'}, home)
 
     def test_config_roundtrip_and_revision_conflict(self):
         value = self.store.save_config(config.default_config(), 0)

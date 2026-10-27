@@ -6,7 +6,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const ROOT = path.resolve(__dirname, '../..');
 // Generate actual production preload bytes, not a hand-maintained copy.
-const source = execFileSync(process.env.PYTHON || 'python', ['-B', '-c', `
+const source = execFileSync(process.env.PYTHON || 'python', ['-X', 'utf8', '-B', '-c', `
 import importlib.util
 from translation_integration import preload_extension
 spec = importlib.util.spec_from_file_location('patcher', 'Antigravity-Patcher.py')
@@ -14,7 +14,7 @@ p = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(p)
 profile = {'policy': {'verified': True, 'rules': [{'selector': '.fixture-static-label', 'contextKind': 'button', 'text': True, 'attributes': ['title']}]}}
 print(p.DOM_TRANSLATOR_INJECTION.replace('  const observer = new MutationObserver', preload_extension(profile) + '\\n  const observer = new MutationObserver', 1))
-`], { cwd: ROOT, encoding: 'utf8' });
+`], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
 class Element {
   constructor(tag, classes = []) { this.nodeType = 1; this.tagName = tag.toUpperCase(); this.classes = classes; this.childNodes = []; this.attrs = {}; this.isConnected = true; this.textContent = ''; }
   append(node) { node.parentElement = this; node.doc = this.doc; this.childNodes.push(node); return node; }
