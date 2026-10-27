@@ -178,7 +178,8 @@ class CleanupTests(unittest.TestCase):
         target = self.link('proxy.lnk', self.app / TOOL.LAUNCHERS[0])
         original = target.read_bytes()
         before = {str(p): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}
-        with mock.patch.object(TOOL, 'load_setup', return_value=self.setup):
+        # Exercise the Windows CLI with isolated fixtures on any test host.
+        with mock.patch.object(TOOL.sys, 'platform', 'win32'), mock.patch.object(TOOL, 'load_setup', return_value=self.setup):
             self.assertEqual(TOOL.main(['--dry-run']), 0)
         self.assertEqual(target.read_bytes(), original)
         self.assertEqual({str(p): p.read_bytes() for p in self.root.rglob('*') if p.is_file()}, before)

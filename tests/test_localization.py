@@ -69,6 +69,11 @@ class LocalizationTests(unittest.TestCase):
         self.stop_mock = self.stop.start()
         self.launch = mock.patch.object(PATCHER, 'launch_application')
         self.launch_mock = self.launch.start()
+        # These are Windows-layout fixtures, independent of the test host OS.
+        # Production platform guards remain unchanged; process calls stay mocked.
+        platform = mock.patch.object(common.sys, 'platform', 'win32')
+        platform.start()
+        self.addCleanup(platform.stop)
 
     def tearDown(self):
         self.launch.stop()
@@ -313,7 +318,7 @@ class LocalizationTests(unittest.TestCase):
     def test_proxy_launch_failure_is_visible_without_direct_fallback(self):
         (self.app / 'Antigravity-Proxy.ps1').write_text('fixture')
         failure = subprocess.CompletedProcess([], 1, b'', b'blocked by execution policy')
-        with mock.patch.object(common.subprocess, 'run', return_value=failure) as run, mock.patch.object(common.subprocess, 'Popen') as spawn:
+        with mock.patch.object(common.subprocess, 'CREATE_NO_WINDOW', 0x08000000, create=True), mock.patch.object(common.subprocess, 'run', return_value=failure) as run, mock.patch.object(common.subprocess, 'Popen') as spawn:
             with self.assertRaisesRegex(RuntimeError, '执行失败'):
                 common.launch_application(self.app)
         run.assert_called_once()
@@ -324,9 +329,14 @@ class LocalizationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'app-dir'):
             common.discover_install(str(self.root))
 
+    def test_unsupported_platform_still_rejected_for_explicit_install(self):
+        with mock.patch.object(common.sys, 'platform', 'linux'):
+            with self.assertRaisesRegex(ValueError, '仅支持 Windows 和 macOS'):
+                common.discover_install(str(self.app))
+
     def test_stop_process_uses_utf8_and_exact_executable_path(self):
         result = subprocess.CompletedProcess([], 0, b'', b'')
-        with mock.patch.object(common.subprocess, 'run', return_value=result) as run:
+        with mock.patch.object(common.subprocess, 'CREATE_NO_WINDOW', 0x08000000, create=True), mock.patch.object(common.subprocess, 'run', return_value=result) as run:
             common.stop_application(self.app)
         self.assertEqual(run.call_args.kwargs['input'].decode('utf-8'), str(self.app / 'Antigravity.exe'))
         import base64
