@@ -10,7 +10,7 @@ This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigra
 
 **Optional AI translation components are present, but no real-application compatibility profile has been validated or shipped.** The registry currently has an empty `profiles` list. Actual installations retain built-in dictionary localization; entering a key does not activate an unverified bridge.
 
-- Independent settings GUI: `python Translation-Settings.py`; requires Tk and a desktop display.
+- Independent settings GUI: `python src/localization/Translation-Settings.py`; requires Tk and a desktop display.
 - Order: built-in dictionary/rules → personal dictionary → AI. AI and automatic translation persistence are off by default; native menus remain dictionary-only.
 - Separate OpenAI Responses, Gemini generateContent, Claude Messages, and custom OpenAI-compatible Chat Completions adapters.
 - Keys are stored **in plaintext** in the user directory with an explicit save warning. Repatching/restoration do not delete settings or the personal dictionary.
@@ -30,6 +30,28 @@ See the [DragonGirl guide](docs/DRAGONGIRL.md) (Chinese) for privacy boundaries,
 
 See [Project status and code guide](PROJECT_STATUS.md) (Chinese) for the implementation and validation scope.
 
+## Repository layout
+
+```text
+src/
+├── localization/                     # Upstream localization/restoration and extensions
+│   ├── Antigravity-Patcher.py
+│   ├── Restore.py
+│   ├── antigravity_common.py
+│   ├── Translation-Settings.py
+│   ├── translation_config.py
+│   ├── translation_integration.py
+│   └── Inspect-Translation-Compatibility.py
+└── proxy/                            # Proxy and shortcut tools added by this fork
+    ├── Setup-Proxy-Shortcuts.py
+    └── Cleanup-Proxy-Shortcuts.py
+localization_runtime/                 # JavaScript runtime and compatibility registry
+tests/                                # Isolated Python / JavaScript tests
+docs/                                 # DragonGirl usage and verification guides
+```
+
+Run the commands below from the repository root. Python entry points now live under `src`; use an absolute script path when launching from another working directory.
+
 ## Requirements and setup
 
 | Function | Environment |
@@ -39,7 +61,7 @@ See [Project status and code guide](PROJECT_STATUS.md) (Chinese) for the impleme
 | Historical validation | Earlier Windows/Python 3.11 work is recorded in PROJECT_STATUS; not DragonGirl real-app acceptance |
 | DragonGirl development tests | Python and Node 22+; isolated simulations do not prove real-app compatibility |
 
-Download the complete repository, including `translation_integration.py`, `translation_config.py`, and all of `localization_runtime/`; distribute the new GUI/inspection tools with these resources. Keep `antigravity_common.py` beside `Antigravity-Patcher.py` and `Restore.py`. Keep `Setup-Proxy-Shortcuts.py` beside `Cleanup-Proxy-Shortcuts.py`.
+Download the complete repository and preserve this layout. Localization, restoration, settings and inspection tools import their sibling modules. Runtime resources are located relative to the source files at the repository root's `localization_runtime/`, independently of the working directory. Cleanup loads Setup from its own directory; keep the two proxy scripts together.
 
 ```powershell
 git clone https://github.com/DemotedHanXin/Antigravity-zh-CN.git
@@ -52,16 +74,16 @@ Save your work first. Localization and restoration stop the target application b
 ## Apply and remove localization
 
 ```powershell
-python Antigravity-Patcher.py
-python Antigravity-Patcher.py --app-dir "D:\Apps\Antigravity" --no-launch
-python Restore.py --app-dir "D:\Apps\Antigravity" --no-launch
+python src/localization/Antigravity-Patcher.py
+python src/localization/Antigravity-Patcher.py --app-dir "D:\Apps\Antigravity" --no-launch
+python src/localization/Restore.py --app-dir "D:\Apps\Antigravity" --no-launch
 ```
 
 On macOS, use `python3` and select the entire app bundle:
 
 ```bash
-python3 Antigravity-Patcher.py --app-dir "/Applications/Antigravity.app" --no-launch
-python3 Restore.py --app-dir "/Applications/Antigravity.app" --no-launch
+python3 src/localization/Antigravity-Patcher.py --app-dir "/Applications/Antigravity.app" --no-launch
+python3 src/localization/Restore.py --app-dir "/Applications/Antigravity.app" --no-launch
 ```
 
 Localization renames the original `resources/app.asar` to `app.asar.disabled` and installs the translated `resources/app`. **The `.disabled` file is the original archive needed for restoration, not leftover proxy backup data. Keep it.** Also retain the official `app.asar.unpacked` dependencies.
@@ -74,13 +96,13 @@ Use this when your proxy client has enabled the **Windows system proxy with an H
 
 ```powershell
 # Preview
-python Setup-Proxy-Shortcuts.py --dry-run
+python src/proxy/Setup-Proxy-Shortcuts.py --dry-run
 
 # Deploy launchers and configure shortcuts
-python Setup-Proxy-Shortcuts.py
+python src/proxy/Setup-Proxy-Shortcuts.py
 
 # Custom installation and additional shortcut locations
-python Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts" --scan-root "E:\Launchers"
+python src/proxy/Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts" --scan-root "E:\Launchers"
 ```
 
 Setup scans current-user and shared Desktop, Start Menu and Startup folders, plus Quick Launch / taskbar `.lnk` files. It matches the destination within the selected installation, not the shortcut name. It creates a personal Start Menu entry when no usable matching entry is available and reports shared shortcuts it cannot update.
@@ -92,14 +114,14 @@ Fully exit Antigravity and launch it again through a repaired shortcut after set
 ### Cleanup and EXE shortcuts
 
 ```powershell
-python Cleanup-Proxy-Shortcuts.py --dry-run
-python Cleanup-Proxy-Shortcuts.py
+python src/proxy/Cleanup-Proxy-Shortcuts.py --dry-run
+python src/proxy/Cleanup-Proxy-Shortcuts.py
 
 # Older launchers may need their original custom roots specified again
-python Cleanup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts"
+python src/proxy/Cleanup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts"
 
 # Recreate the proxy launch setup later
-python Setup-Proxy-Shortcuts.py
+python src/proxy/Setup-Proxy-Shortcuts.py
 ```
 
 Cleanup keeps matching `.lnk` files, retargets them to `Antigravity.exe`, decodes the original arguments and retains icons / working directories. It deletes `Antigravity-Proxy.cmd` and `Antigravity-Proxy.ps1` only after all scanned proxy shortcuts have been handled.
@@ -142,7 +164,7 @@ See [PROJECT_STATUS.md](PROJECT_STATUS.md) for module responsibilities, file sta
 
 ![Antigravity Chinese UI example](antigravity-chinese.png)
 
-This example does not imply complete translation of every version or generated content. Add translations to the dictionary in `Antigravity-Patcher.py`, then reapply the patch.
+This example does not imply complete translation of every version or generated content. Add translations to the dictionary in `src/localization/Antigravity-Patcher.py`, then reapply the patch.
 
 ## Contributing and license
 

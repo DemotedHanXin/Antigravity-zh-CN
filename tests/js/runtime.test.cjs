@@ -28,7 +28,16 @@ async function writeState(store,config,dictionary=S.defaultDictionary()){await S
 function enabledConfig(){const config=S.defaultConfig();config.enabled=true;config.revision=1;config.providers.openai=profile;return config;}
 test('missing store reads disabled without creating path',async(t)=>{const store=await tempStore(t);const nonexistent=new S.Store(path.join(store.directory,'missing'));assert.equal((await nonexistent.read()).config.enabled,false);await assert.rejects(fs.stat(nonexistent.directory),{code:'ENOENT'});});
 test('corrupt files preserved',async(t)=>{const store=await tempStore(t);const f=path.join(store.directory,'config.json');await fs.writeFile(f,'{broken');await assert.rejects(store.read());assert.equal(await fs.readFile(f,'utf8'),'{broken');});
-test('symlink storage rejected',async(t)=>{const store=await tempStore(t);const f=path.join(store.directory,'config.json');await fs.writeFile(path.join(store.directory,'other'),'{}');await fs.symlink('other',f);await assert.rejects(store.read());});
+test('symlink storage rejected',async(t)=>{
+ const store=await tempStore(t),f=path.join(store.directory,'config.json');
+ await fs.writeFile(path.join(store.directory,'other'),'{}');
+ try { await fs.symlink('other',f); }
+ catch(error) {
+  if(process.platform==='win32'&&error.code==='EPERM') { t.skip('Windows symlink privilege unavailable'); return; }
+  throw error;
+ }
+ await assert.rejects(store.read());
+});
 test('AI persistence guarded by opt-in revision manual and tombstone',async(t)=>{
  const store=await tempStore(t),config=enabledConfig(),dictionary=S.defaultDictionary();config.autoSave=true;dictionary.entries.Save={translation:'保存',source:'manual',updatedAt:'now',context:'ui'};dictionary.tombstones.Delete=0;
  await writeState(store,config,dictionary);assert.equal(await store.saveAI([{source:'New label',translation:'新标签'}],9,1),false);

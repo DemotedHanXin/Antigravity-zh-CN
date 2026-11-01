@@ -16,13 +16,15 @@
 
 ## 2. 启动设置界面
 
-从完整源码目录运行：
+从完整仓库的根目录运行：
 
 ```bash
-python Translation-Settings.py
+python src/localization/Translation-Settings.py
 # macOS 如需使用 python3：
-python3 Translation-Settings.py
+python3 src/localization/Translation-Settings.py
 ```
+
+本文中的命令均从仓库根目录执行。源码入口位于 `src/localization/`；从其他工作目录启动时使用完整脚本路径。
 
 需要带 Tk 的 Python 和可用桌面显示环境。导入模块不会弹出 GUI、修改安装或发起网络请求。缺少 Tk/显示环境会说明不可用，而不是绕过检查。单纯编辑配置不要求 Node；可选连接测试需要 `node` 在 PATH 中，并随源码/冻结包附带 `localization_runtime/probe.cjs`。
 
@@ -72,7 +74,7 @@ Linux 用户目录支持只用于设置/开发工具，不表示汉化安装工�
 
 “自动保存 AI 译文”关闭时，仅使用会话缓存；开启时才将通过校验的结果保存到个人词典。可在词典页查看、检索、编辑、删除。已有个人词典可以在 AI 关闭时使用，但仍需可信应用桥接和安全 DOM 区域。
 
-重新汉化、官方更新与 `Restore.py` 不删除用户目录。官方更新可能覆盖注入，使补译暂停；重新验证并汉化后才恢复。还原英文不是清除个人数据，清除账户/密钥需另行处理。
+重新汉化、官方更新与 `src/localization/Restore.py` 不删除用户目录。官方更新可能覆盖注入，使补译暂停；重新验证并汉化后才恢复。还原英文不是清除个人数据，清除账户/密钥需另行处理。
 
 ## 5. 为什么桥接默认不启用
 
@@ -81,7 +83,7 @@ Linux 用户目录支持只用于设置/开发工具，不表示汉化安装工�
 只读检查工具用于**已合法取得并解包的应用副本**：
 
 ```bash
-python Inspect-Translation-Compatibility.py /path/to/extracted-app --ui-file dist/example-ui.js
+python src/localization/Inspect-Translation-Compatibility.py /path/to/extracted-app --ui-file dist/example-ui.js
 ```
 
 `--ui-file` 示例路径必须替换为副本中实际存在的 UI 资源，可重复指定。工具读取 `package.json`、入口、preload 和指定 UI 文件并输出摘要；不解包真实安装、不关闭应用、不写安装文件、不联网。`matchedProfile: null` 表示没有已审核匹配项；`bridgeVerified: false` 表示指纹本身不是运行兼容证明。
@@ -98,22 +100,24 @@ python Inspect-Translation-Compatibility.py /path/to/extracted-app --ui-file dis
 
 ## 6. 源码分发与打包
 
-分发完整源码，至少保留：
+分发完整源码并保留目录结构，至少保留：
 
-- `Antigravity-Patcher.py`、`Restore.py`、`antigravity_common.py`；
-- `translation_integration.py` 与完整 `localization_runtime/`（包括兼容注册表）；
-- `Translation-Settings.py`、`translation_config.py`；
-- `Inspect-Translation-Compatibility.py`；
-- 代理功能仍需 Setup/Cleanup 两个原脚本。
+- `src/localization/Antigravity-Patcher.py`、`src/localization/Restore.py`、`src/localization/antigravity_common.py`；
+- `src/localization/translation_integration.py` 与完整 `localization_runtime/`（包括兼容注册表）；
+- `src/localization/Translation-Settings.py`、`src/localization/translation_config.py`；
+- `src/localization/Inspect-Translation-Compatibility.py`；
+- 代理功能仍需 `src/proxy/Setup-Proxy-Shortcuts.py` 和同目录的 `Cleanup-Proxy-Shortcuts.py`。
+
+汉化相关 Python 模块保持在 `src/localization/` 同一目录；JavaScript 资源继续放在仓库根目录 `localization_runtime/`。源码根据脚本位置查找资源，冻结包根据 `_MEIPASS` 查找包内资源；设置 GUI 与桥接共用此定位逻辑，不依赖启动时的工作目录。用户配置和个人词典仍保存在用户数据目录。
 
 macOS 工作流 `.github/workflows/build-mac.yml` 为本机 Intel/arm64 分别构建，不用同一个架构解释器冒充跨架构成功。对应 `macos-15-intel` / `macos-15` runner 标签已按 [GitHub 官方 runner 文档](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) 核对（2026-10-26）。Patcher、设置 GUI 和兼容检查工具需显式带入 runtime 资源，例如：
 
 ```bash
-# 在目标 macOS 架构的 Python 环境运行；PyInstaller 是打包依赖，不是运行源码的必需依赖。
-python -m PyInstaller -F --add-data "localization_runtime:localization_runtime" Antigravity-Patcher.py
-python -m PyInstaller -F --add-data "localization_runtime:localization_runtime" Translation-Settings.py
-python -m PyInstaller -F --add-data "localization_runtime:localization_runtime" Inspect-Translation-Compatibility.py
-python -m PyInstaller -F Restore.py
+# 从仓库根目录、目标 macOS 架构的 Python 环境运行；PyInstaller 是打包依赖。
+python -m PyInstaller -F --add-data "localization_runtime:localization_runtime" src/localization/Antigravity-Patcher.py
+python -m PyInstaller -F --add-data "localization_runtime:localization_runtime" src/localization/Translation-Settings.py
+python -m PyInstaller -F --add-data "localization_runtime:localization_runtime" src/localization/Inspect-Translation-Compatibility.py
+python -m PyInstaller -F src/localization/Restore.py
 ```
 
 GUI 包不附带 Node；可选网络测试仍需外部 Node。已安装的桥接运行于应用自身 Electron/Node 环境，不能以开发机 Node 测试替代该运行时验收。本次未实际构建原生二进制，也未在 GitHub 上执行新工作流。打包产物只是待验收构建，不自动签名、公证或发布。冻结包需验证任意工作目录启动、资源包含、Tk 可用和无真实凭据打包。

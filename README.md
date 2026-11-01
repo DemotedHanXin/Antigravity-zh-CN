@@ -10,7 +10,7 @@
 
 **本分支新增了可选 AI 补译组件，但尚未提供真实应用验证过的兼容 profile。** 当前 `profiles` 为空，真实应用仍使用原有内置词典汉化；不会仅因填写密钥就开始 AI 补译。
 
-- 独立 GUI：`python Translation-Settings.py`，需要带 Tk 的 Python/桌面环境。
+- 独立 GUI：`python src/localization/Translation-Settings.py`，需要带 Tk 的 Python/桌面环境。
 - 内置词典/规则 → 个人词典 → AI；AI 和自动保存译文默认关闭，原生菜单不接 AI。
 - OpenAI Responses、Gemini generateContent、Claude Messages 及自定义 OpenAI 兼容 Chat Completions 四种协议。
 - 密钥明文保存在用户目录，保存前明确提示；配置/个人词典不会随汉化更新或还原删除。
@@ -30,6 +30,28 @@
 
 实现细节、状态转换、文件用途和验证范围见 [项目状态与代码说明](PROJECT_STATUS.md)。
 
+## 目录结构
+
+```text
+src/
+├── localization/                     # 原作者汉化、还原及相关扩展
+│   ├── Antigravity-Patcher.py
+│   ├── Restore.py
+│   ├── antigravity_common.py
+│   ├── Translation-Settings.py
+│   ├── translation_config.py
+│   ├── translation_integration.py
+│   └── Inspect-Translation-Compatibility.py
+└── proxy/                            # 本分支的代理与快捷方式工具
+    ├── Setup-Proxy-Shortcuts.py
+    └── Cleanup-Proxy-Shortcuts.py
+localization_runtime/                 # JavaScript 运行时与兼容注册表
+tests/                                # Python / JavaScript 隔离测试
+docs/                                 # DragonGirl 使用与验证说明
+```
+
+下文命令均从仓库根目录执行。Python 入口已迁入 `src`；从其他工作目录运行时，请使用入口脚本的完整路径。
+
 ## 运行条件与准备
 
 | 功能 | 环境 |
@@ -39,7 +61,7 @@
 | 原有修复记录 | 历史 Windows/Python 3.11 验证见 PROJECT_STATUS；不代表 DragonGirl 真机验证 |
 | DragonGirl 开发测试 | Python、Node 22+；隔离模拟不等于真实应用兼容 |
 
-下载完整仓库，并保留 `translation_integration.py`、`translation_config.py` 和完整 `localization_runtime/`；新 GUI/检查工具与这些模块一起分发。原有脚本依赖：`Antigravity-Patcher.py`、`Restore.py` 依赖同目录的 `antigravity_common.py`；`Cleanup-Proxy-Shortcuts.py` 依赖同目录的 `Setup-Proxy-Shortcuts.py`。
+下载完整仓库并保留上述目录结构。汉化、还原、设置 GUI 和兼容检查工具通过同目录模块导入依赖；运行时资源按源码位置查找仓库根目录的 `localization_runtime/`，不依赖当前工作目录。Cleanup 从自身所在目录加载 Setup，两个代理脚本应一起保留。
 
 ```powershell
 git clone https://github.com/DemotedHanXin/Antigravity-zh-CN.git
@@ -53,20 +75,20 @@ python --version
 
 ```powershell
 # 自动查找安装目录并汉化
-python Antigravity-Patcher.py
+python src/localization/Antigravity-Patcher.py
 
 # 指定包含 Antigravity.exe 的目录；完成后不自动启动
-python Antigravity-Patcher.py --app-dir "D:\Apps\Antigravity" --no-launch
+python src/localization/Antigravity-Patcher.py --app-dir "D:\Apps\Antigravity" --no-launch
 
 # 恢复英文原版；自定义安装使用同一个目录
-python Restore.py --app-dir "D:\Apps\Antigravity" --no-launch
+python src/localization/Restore.py --app-dir "D:\Apps\Antigravity" --no-launch
 ```
 
 macOS 使用 `python3`，`--app-dir` 指向整个 `.app`，例如：
 
 ```bash
-python3 Antigravity-Patcher.py --app-dir "/Applications/Antigravity.app" --no-launch
-python3 Restore.py --app-dir "/Applications/Antigravity.app" --no-launch
+python3 src/localization/Antigravity-Patcher.py --app-dir "/Applications/Antigravity.app" --no-launch
+python3 src/localization/Restore.py --app-dir "/Applications/Antigravity.app" --no-launch
 ```
 
 汉化会将原版 `resources/app.asar` 改名保留为 `app.asar.disabled`，并生成汉化后的 `resources/app`。**`.disabled` 是恢复原版所需的原始归档，不是代理备份残留，请勿手动删除。** `app.asar.unpacked` 是官方运行依赖，也应保留。
@@ -79,13 +101,13 @@ python3 Restore.py --app-dir "/Applications/Antigravity.app" --no-launch
 
 ```powershell
 # 查看将处理的安装与快捷方式
-python Setup-Proxy-Shortcuts.py --dry-run
+python src/proxy/Setup-Proxy-Shortcuts.py --dry-run
 
 # 创建启动器并修改快捷方式
-python Setup-Proxy-Shortcuts.py
+python src/proxy/Setup-Proxy-Shortcuts.py
 
 # 自定义安装与快捷方式目录；--scan-root 可以重复使用
-python Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts" --scan-root "E:\Launchers"
+python src/proxy/Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts" --scan-root "E:\Launchers"
 ```
 
 脚本扫描当前用户和公共桌面、开始菜单、启动项及 Quick Launch／任务栏中的 `.lnk`，只处理指向所选安装的快捷方式。没有可用开始菜单入口时，会创建个人入口；权限不足的共享入口仍会单独报告。名称相似的其他软件不会被当作 Antigravity。
@@ -97,14 +119,14 @@ python Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\
 ### 清理并改回 EXE 启动
 
 ```powershell
-python Cleanup-Proxy-Shortcuts.py --dry-run
-python Cleanup-Proxy-Shortcuts.py
+python src/proxy/Cleanup-Proxy-Shortcuts.py --dry-run
+python src/proxy/Cleanup-Proxy-Shortcuts.py
 
 # 旧版启动器没有扫描目录记录时，需要再次提供 --scan-root
-python Cleanup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts"
+python src/proxy/Cleanup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts"
 
 # 以后重新启用代理启动
-python Setup-Proxy-Shortcuts.py
+python src/proxy/Setup-Proxy-Shortcuts.py
 ```
 
 清理会保留 `.lnk`，将目标改回 `Antigravity.exe`，恢复编码前的启动参数并保留图标、工作目录。所有已扫描的代理入口处理成功后，才删除安装目录下的 `Antigravity-Proxy.cmd` 和 `Antigravity-Proxy.ps1`。
@@ -147,7 +169,7 @@ node --test tests/js/*.test.cjs
 
 ![Antigravity 中文界面示例](antigravity-chinese.png)
 
-示例不代表所有版本、动态内容或模型输出均已翻译。新增词条可修改 `Antigravity-Patcher.py` 中的翻译字典，再运行汉化脚本。
+示例不代表所有版本、动态内容或模型输出均已翻译。新增词条可修改 `src/localization/Antigravity-Patcher.py` 中的翻译字典，再运行汉化脚本。
 
 ## 贡献与许可
 

@@ -15,7 +15,7 @@ import unittest
 from unittest import mock
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / 'Setup-Proxy-Shortcuts.py'
+SCRIPT = Path(__file__).resolve().parents[1] / 'src' / 'proxy' / 'Setup-Proxy-Shortcuts.py'
 SPEC = importlib.util.spec_from_file_location('proxy_shortcuts', SCRIPT)
 TOOL = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(TOOL)

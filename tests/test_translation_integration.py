@@ -12,12 +12,12 @@ import tempfile
 import unittest
 from unittest import mock
 
+from source_paths import LOCALIZATION
 import translation_integration as bridge
 import antigravity_common as common
 from test_localization import make_archive
 
-ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location('bridge_patcher', ROOT / 'Antigravity-Patcher.py')
+SPEC = importlib.util.spec_from_file_location('bridge_patcher', LOCALIZATION / 'Antigravity-Patcher.py')
 PATCHER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PATCHER)
 
@@ -58,10 +58,17 @@ class BridgePackagingTests(unittest.TestCase):
         (self.stage / 'dist/ui.js').write_text('// different version', encoding='utf-8')
         self.assertIsNone(bridge.select_profile(self.stage, [self.profile]))
 
-    def test_symlink_and_traversal_rejected(self):
+    def test_traversal_rejected(self):
         with self.assertRaises(ValueError):
             bridge.fingerprints(self.stage, ['../outside'])
-        (self.stage / 'linked').symlink_to(self.stage / 'dist/ui.js')
+
+    def test_symlink_rejected(self):
+        try:
+            (self.stage / 'linked').symlink_to(self.stage / 'dist/ui.js')
+        except OSError as error:
+            if getattr(error, 'winerror', None) == 1314:
+                self.skipTest('Windows symlink privilege unavailable')
+            raise
         with self.assertRaises(ValueError):
             bridge.fingerprints(self.stage, ['linked'])
 
@@ -112,7 +119,7 @@ class BridgePackagingTests(unittest.TestCase):
         self.assertEqual(sentinel.read_text(encoding='utf-8'), 'keep')
 
     def test_full_fixture_patch_repeat_restore_preserves_user_data(self):
-        restore_spec = importlib.util.spec_from_file_location('bridge_restore', ROOT / 'Restore.py')
+        restore_spec = importlib.util.spec_from_file_location('bridge_restore', LOCALIZATION / 'Restore.py')
         restore = importlib.util.module_from_spec(restore_spec)
         restore_spec.loader.exec_module(restore)
         installation = self.stage / 'installation'

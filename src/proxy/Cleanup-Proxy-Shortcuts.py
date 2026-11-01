@@ -19,7 +19,7 @@ SETUP_BACKUPS = 'antigravity-proxy-backups'
 
 
 def load_setup():
-    source = Path(__file__).with_name('Setup-Proxy-Shortcuts.py')
+    source = Path(__file__).resolve().with_name('Setup-Proxy-Shortcuts.py')
     if not source.is_file():
         raise ValueError('请将此脚本与 Setup-Proxy-Shortcuts.py 放在同一个文件夹中。')
     # run_path does not run the sibling script's __main__ entry point.

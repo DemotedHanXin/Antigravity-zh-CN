@@ -2,13 +2,12 @@
 """Independent settings editor. Importing this module never opens GUI or network."""
 import copy
 import json
-from pathlib import Path
 import shutil
 import subprocess
-import sys
 import threading
 from urllib.parse import urlsplit
 from translation_config import DataError, PROVIDERS, UserStore, validate_config
+from translation_integration import resource_root
 
 
 class SettingsController:
@@ -65,8 +64,7 @@ PROBE_STATUSES = {
 
 def probe_command():
     node = shutil.which('node')
-    root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
-    probe = root / 'localization_runtime' / 'probe.cjs'
+    probe = resource_root() / 'probe.cjs'
     if not node or not probe.is_file():
         raise DataError('连接测试需要 Node.js 和完整的运行时资源；未发起网络请求。')
     return [node, str(probe), '--confirm-network']

@@ -10,7 +10,7 @@ import unittest
 from unittest import mock
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / 'Cleanup-Proxy-Shortcuts.py'
+SCRIPT = Path(__file__).resolve().parents[1] / 'src' / 'proxy' / 'Cleanup-Proxy-Shortcuts.py'
 SPEC = importlib.util.spec_from_file_location('cleanup_proxy_shortcuts', SCRIPT)
 TOOL = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(TOOL)

@@ -14,7 +14,7 @@ p = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(p)
 profile = {'policy': {'verified': True, 'rules': [{'selector': '.fixture-static-label', 'contextKind': 'button', 'text': True, 'attributes': ['title']}]}}
 print(p.DOM_TRANSLATOR_INJECTION.replace('  const observer = new MutationObserver', preload_extension(profile) + '\\n  const observer = new MutationObserver', 1))
-`], { cwd: ROOT, encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+`], { cwd: path.join(ROOT, 'src', 'localization'), encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
 class Element {
   constructor(tag, classes = []) { this.nodeType = 1; this.tagName = tag.toUpperCase(); this.classes = classes; this.childNodes = []; this.attrs = {}; this.isConnected = true; this.textContent = ''; }
   append(node) { node.parentElement = this; node.doc = this.doc; this.childNodes.push(node); return node; }

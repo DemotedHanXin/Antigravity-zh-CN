@@ -1,12 +1,12 @@
 # 项目状态与代码说明
 
-更新日期：2026-10-26。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次修复。日常使用命令见 [README.md](README.md)，英文说明见 [README_EN.md](README_EN.md)。
+更新日期：2026-11-01。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次修复。日常使用命令见 [README.md](README.md)，英文说明见 [README_EN.md](README_EN.md)。
 
 ## 0. DragonGirl 开发版增量与验证边界
 
 本节描述 `feat/DragonGirl` 的新增组件；后文原有修复记录中的历史测试数量、Windows 版本和官方应用样本信息不是此次新增功能的执行结果。
 
-新增独立 `Translation-Settings.py` / `translation_config.py` 管理用户配置和个人词典，`localization_runtime/` 提供安全 DOM 管线、主进程 IPC、队列/缓存、四类 API 适配器及显式连接测试；`translation_integration.py` 将桥接注入限制在已审核的应用指纹 profile 中。`Inspect-Translation-Compatibility.py` 只读检查已解包副本，不会启用 AI。
+新增独立 `src/localization/Translation-Settings.py` / `src/localization/translation_config.py` 管理用户配置和个人词典，`localization_runtime/` 提供安全 DOM 管线、主进程 IPC、队列/缓存、四类 API 适配器及显式连接测试；`src/localization/translation_integration.py` 将桥接注入限制在已审核的应用指纹 profile 中。`src/localization/Inspect-Translation-Compatibility.py` 只读检查已解包副本，不会启用 AI。
 
 **实际发货注册表 `profiles` 为空：没有真实应用 profile，真实安装不启用个人词典/AI 桥接。** 现有同步词典汉化继续保留。测试 fixture 的可信窗口、DOM 和摘要只用于验证机制，不能写成真实版本支持声明。
 
@@ -44,16 +44,27 @@
 
 ## 2. 源码结构
 
+Python 源码集中在 `src/` 的两个目录：`localization/` 保存原作者的汉化/还原入口及共享模块、DragonGirl 扩展；`proxy/` 保存本分支新增的代理配置/清理入口。`localization_runtime/`、`tests/` 和 `docs/` 位于仓库根目录，完整目录树见 README。
+
 | 文件 | 职责与主要入口 |
 | --- | --- |
-| [Antigravity-Patcher.py](Antigravity-Patcher.py) | 翻译词典、DOM/菜单注入代码，以及 `apply_patch()` 汉化流程；`main()` 解析 CLI |
-| [Restore.py](Restore.py) | `restore()` 验证原版归档、切换应用状态、清除汉化目录；`main()` 处理 CLI 和失败状态 |
-| [antigravity_common.py](antigravity_common.py) | 安装目录发现、ASAR 校验/提取、入口验证、受限范围删除，以及目标安装的进程控制 |
-| [Setup-Proxy-Shortcuts.py](Setup-Proxy-Shortcuts.py) | 启动器模板、Windows 快捷方式 COM 桥接、扫描、策略检查、目录元数据与 `install()` |
-| [Cleanup-Proxy-Shortcuts.py](Cleanup-Proxy-Shortcuts.py) | 加载同目录 Setup 工具函数；`plan_cleanup()` 计划修改，`apply_cleanup()` 改回 EXE 后删除启动器 |
+| [src/localization/Antigravity-Patcher.py](src/localization/Antigravity-Patcher.py) | 翻译词典、DOM/菜单注入代码，以及 `apply_patch()` 汉化流程；`main()` 解析 CLI |
+| [src/localization/Restore.py](src/localization/Restore.py) | `restore()` 验证原版归档、切换应用状态、清除汉化目录；`main()` 处理 CLI 和失败状态 |
+| [src/localization/antigravity_common.py](src/localization/antigravity_common.py) | 安装目录发现、ASAR 校验/提取、入口验证、受限范围删除，以及目标安装的进程控制 |
+| [src/localization/Translation-Settings.py](src/localization/Translation-Settings.py) | 独立 Tkinter 设置 GUI、个人词典编辑与显式连接测试 |
+| [src/localization/translation_config.py](src/localization/translation_config.py) | 用户数据路径、配置/词典校验、跨进程锁与原子保存 |
+| [src/localization/translation_integration.py](src/localization/translation_integration.py) | 运行时资源定位、应用指纹/profile 检查与桥接注入 |
+| [src/localization/Inspect-Translation-Compatibility.py](src/localization/Inspect-Translation-Compatibility.py) | 只读检查已解包应用副本并报告兼容 profile |
+| [src/proxy/Setup-Proxy-Shortcuts.py](src/proxy/Setup-Proxy-Shortcuts.py) | 启动器模板、Windows 快捷方式 COM 桥接、扫描、策略检查、目录元数据与 `install()` |
+| [src/proxy/Cleanup-Proxy-Shortcuts.py](src/proxy/Cleanup-Proxy-Shortcuts.py) | 加载同目录 Setup 工具函数；`plan_cleanup()` 计划修改，`apply_cleanup()` 改回 EXE 后删除启动器 |
+| [localization_runtime](localization_runtime) | JavaScript 运行时、连接测试探针与兼容注册表 |
 | [tests](tests) | 隔离样例与回归测试，不以真实安装作为写入目标 |
 
-汉化和还原通过普通 Python 导入共享模块，因此分发源码时必须包含 `antigravity_common.py`。Cleanup 使用 `runpy.run_path()` 读取同目录 Setup 的定义，不会执行它的命令行入口。
+分发源码时保留 `src/localization/` 中的同目录模块及根目录 `localization_runtime/`。桥接和 GUI 共用 `resource_root()`：源码按 `__file__` 定位仓库根，PyInstaller 包按 `_MEIPASS` 定位资源。Cleanup 使用 `runpy.run_path()` 读取同目录 Setup 的定义，不会执行它的命令行入口。
+
+Python 测试通过 `tests/source_paths.py` 定位迁移后的模块，JavaScript preload 集成测试也从新目录加载入口。macOS 构建工作流使用 `src/localization/` 下的脚本，`--add-data` 的资源源目录和包内路径仍为 `localization_runtime`。日常命令和打包命令均从仓库根目录执行；从其他目录启动源码时使用完整脚本路径。
+
+2026-11-01 在 Windows 完成本次整理验证：Python 129 项（127 通过、2 跳过），JavaScript 76 项（75 通过、1 跳过），无失败；另检查跨工作目录启动、源码/冻结资源路径、语法和文档链接。跳过原因及验证边界见 [验证记录](docs/DRAGONGIRL-VERIFICATION.md)。
 
 ### 公共模块的关键函数
 
@@ -142,7 +153,7 @@
 | Setup / Cleanup | `--scan-root` | 额外扫描快捷方式目录，可重复使用 |
 | Setup / Cleanup | `--dry-run` | 预览，不创建、修改或删除安装文件及快捷方式 |
 
-两条恢复操作的用途不同：`Restore.py` 恢复英文界面；`Cleanup-Proxy-Shortcuts.py` 退出代理启动方式。后者不操作汉化归档，前者不清理代理快捷方式。
+两条恢复操作的用途不同：`src/localization/Restore.py` 恢复英文界面；`src/proxy/Cleanup-Proxy-Shortcuts.py` 退出代理启动方式。后者不操作汉化归档，前者不清理代理快捷方式。
 
 ## 6. 原有修复的历史验证记录与边界
 

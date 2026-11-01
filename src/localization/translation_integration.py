@@ -16,7 +16,10 @@ REGISTRY = 'compatibility.json'
 
 
 def resource_root():
-    return Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent)) / 'localization_runtime'
+    """Find repository resources or PyInstaller data, regardless of the cwd."""
+    bundle = getattr(sys, '_MEIPASS', None)
+    root = Path(bundle) if bundle else Path(__file__).resolve().parents[2]
+    return root / 'localization_runtime'
 
 
 def _read_json(path):

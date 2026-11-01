@@ -11,9 +11,10 @@ import shutil
 import unittest
 from unittest import mock
 
+from source_paths import LOCALIZATION
 import translation_config as config
 
-SPEC = importlib.util.spec_from_file_location('translation_settings', Path(__file__).resolve().parents[1] / 'Translation-Settings.py')
+SPEC = importlib.util.spec_from_file_location('translation_settings', LOCALIZATION / 'Translation-Settings.py')
 GUI = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GUI)
 

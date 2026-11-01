@@ -10,9 +10,10 @@ import tempfile
 import unittest
 from unittest import mock
 
+from source_paths import LOCALIZATION, ROOT as WORKSPACE
 
-WORKSPACE = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location('restore_application', WORKSPACE / 'Restore.py')
+
+SPEC = importlib.util.spec_from_file_location('restore_application', LOCALIZATION / 'Restore.py')
 TOOL = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(TOOL)
 

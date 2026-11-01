@@ -1,4 +1,4 @@
-# DragonGirl 本轮验证记录
+# DragonGirl 验证记录
 
 日期：2026-10-26；执行环境：Linux 云工作区。起点 `feat/Fly`：`c18e0eaa40a8ac7effaf01c78663ff51f81434d7`；开发分支 `feat/DragonGirl`。
 
@@ -24,3 +24,16 @@
 - 本地提交不等于远端已有代码；未推送、建远程分支/PR、发布 Release。远程写权限按用户安排延后。
 
 下一道门槛是取得授权应用副本，在隔离环境验证入口、窗口、preload 与精确 UI 白名单，并完成对应系统真机回归；不能仅添加哈希就声称兼容。详细使用及验证要求见 [DRAGONGIRL.md](DRAGONGIRL.md)。
+
+## 2026-11-01：源码目录整理（Windows）
+
+执行环境：Windows，Python 3.11.4，Node v24.15.0。9 个 Python 源文件迁入 `src/localization/` 和 `src/proxy/`，同步更新模块/资源定位、测试入口、macOS 构建入口及使用文档。
+
+- `python -B -m unittest discover -s tests -q`：**129 项，127 项通过，2 项按环境跳过，无失败**。跳过项分别为 POSIX 权限检查和缺少 Windows 符号链接权限的检查；路径越界检查仍单独执行。
+- `node --test --test-reporter=tap tests/js/*.test.cjs`：**76 项，75 项通过，1 项因缺少 Windows 符号链接权限跳过，无失败**。仅在 Windows 返回权限错误时跳过该项，其他错误继续报告失败。
+- 新增迁移回归检查：5 个 CLI 从其他工作目录执行 `--help`；设置 GUI 的无窗口导入、源码运行时和连接测试探针定位；Cleanup 从自身目录加载 Setup；模拟 `_MEIPASS` 中的冻结资源定位及资源缺失时拒绝回退。
+- 同步本机 `.idea/workspace.xml` 中 4 个 PyCharm 运行配置的脚本入口，验证 XML 和目标路径有效；该文件按仓库现有规则忽略，不随 Git 提交。
+- 17 个 Python 源码/测试文件通过 Python 3.8 grammar 检查；10 个 JS/CJS 文件通过 `node --check`；本地 Markdown 链接与 `git diff --check` 检查通过。
+- 默认沙盒临时目录阻止部分重命名操作；本轮测试只在测试进程内将 `TEMP` / `TMP` 指向仓库中的 `.test-tmp/`，运行后清理该目录，未改动系统环境变量或用户配置。
+
+本轮没有操作真实 Antigravity 安装、现有代理快捷方式或 API，也没有实际构建 PyInstaller 二进制、执行远程 CI 或发布。冻结资源检查为隔离模拟，不能替代冻结包或真实应用验收。
