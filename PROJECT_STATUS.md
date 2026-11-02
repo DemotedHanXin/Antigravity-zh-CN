@@ -1,6 +1,8 @@
 # 项目状态与代码说明
 
-更新日期：2026-11-01。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次修复。日常使用命令见 [README.md](README.md)，英文说明见 [README_EN.md](README_EN.md)。
+更新日期：2026-11-02。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次修复。日常使用命令见 [README.md](README.md)，英文说明见 [README_EN.md](README_EN.md)。
+
+Windows 管理器开发已建立 [M0 基线与开发约定](docs/development/M0-baseline.md) 和 [阶段进度](docs/development/PROGRESS.md)：固定在 `feat/DragonGirl` 开发，每阶段记录、提交、打附注标签并等待用户审核。当前仅 M0 文档交付待审，M1 真实接入尚未开始；本文已有实现不因计划建立而改变。当前同一代码基线的隔离测试为 Python 129 项（127 通过、2 跳过）、JavaScript 94 项（93 通过、1 跳过），来源与验证边界见 M0 记录；下文历史计数保留各自日期语境。
 
 ## 0. DragonGirl 开发版增量与验证边界
 

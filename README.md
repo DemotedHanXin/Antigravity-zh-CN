@@ -6,6 +6,12 @@
 
 本分支基于 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN) 扩展。翻译规则以 v2.21.1 的文件结构为基础，不保证所有版本的文本覆盖率。本次修复针对仓库中的 **Python 源码**；旧版 Release 中的可执行程序需要重新打包后才包含这些修复。
 
+## Windows 管理器分阶段开发
+
+后续在 `feat/DragonGirl` 上按 M0–M5 顺序开发 Python + PySide6 管理器。每阶段交付记录文档、本地提交和附注标签，等待用户审核通过后才继续；不自动推送、合并或发布。当前 **M0 文档基线已交付，待审核，M1 尚未开始**。
+
+需求、使用与启动规划见 [M0 基线与开发约定](docs/development/M0-baseline.md)，阶段状态及下一步见 [开发进度](docs/development/PROGRESS.md)。PySide6 管理器、个人词典优先、7 天候选缓存和 Windows 安装包均为后续目标；下文仍描述当前已有脚本。
+
 ## DragonGirl 开发版：请先了解状态
 
 **本分支新增了可选 AI 补译组件，但尚未提供真实应用验证过的兼容 profile。** 当前 `profiles` 为空，真实应用仍使用原有内置词典汉化；不会仅因填写密钥就开始 AI 补译。

@@ -6,6 +6,12 @@ Chinese UI localization, restoration, and Windows proxy launcher / shortcut mana
 
 This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN). Translation rules target the v2.21.1 layout; text coverage and compatibility with other versions are not guaranteed. These changes apply to **the Python source in this repository**. Previously published executables need rebuilding to include them.
 
+## Staged Windows manager development
+
+Development stays on `feat/DragonGirl`, progressing from M0 through M5. Each stage delivers documentation, a local commit and an annotated review tag, then stops for explicit user approval. No automatic push, merge or release is included. **M0 documentation is ready for review; M1 has not started.**
+
+See the [M0 baseline and development agreement](docs/development/M0-baseline.md) and [progress tracker](docs/development/PROGRESS.md) (Chinese). The PySide6 manager, personal-dictionary precedence, seven-day candidate cache and Windows installer are planned capabilities. The sections below describe the existing scripts.
+
 ## DragonGirl development status — read first
 
 **Optional AI translation components are present, but no real-application compatibility profile has been validated or shipped.** The registry currently has an empty `profiles` list. Actual installations retain built-in dictionary localization; entering a key does not activate an unverified bridge.
