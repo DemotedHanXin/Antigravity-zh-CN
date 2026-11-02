@@ -69,7 +69,7 @@ cd Antigravity-zh-CN
 python --version
 ```
 
-请先保存 Antigravity 中的工作。汉化和还原会关闭目标应用以切换安装文件；`--no-launch` 只禁止完成后的自动启动。代理 Setup/Cleanup 不结束正在运行的软件。
+请先保存 Antigravity 中的工作。汉化和还原会关闭目标应用以切换安装文件。汉化完成后只输出处理结果，不自动启动应用；还原可使用 `--no-launch` 禁止完成后的自动启动。代理 Setup/Cleanup 不结束正在运行的软件。
 
 ## 汉化与还原
 
@@ -77,8 +77,8 @@ python --version
 # 自动查找安装目录并汉化
 python src/localization/Antigravity-Patcher.py
 
-# 指定包含 Antigravity.exe 的目录；完成后不自动启动
-python src/localization/Antigravity-Patcher.py --app-dir "D:\Apps\Antigravity" --no-launch
+# 指定包含 Antigravity.exe 的目录
+python src/localization/Antigravity-Patcher.py --app-dir "D:\Apps\Antigravity"
 
 # 恢复英文原版；自定义安装使用同一个目录
 python src/localization/Restore.py --app-dir "D:\Apps\Antigravity" --no-launch
@@ -87,9 +87,11 @@ python src/localization/Restore.py --app-dir "D:\Apps\Antigravity" --no-launch
 macOS 使用 `python3`，`--app-dir` 指向整个 `.app`，例如：
 
 ```bash
-python3 src/localization/Antigravity-Patcher.py --app-dir "/Applications/Antigravity.app" --no-launch
+python3 src/localization/Antigravity-Patcher.py --app-dir "/Applications/Antigravity.app"
 python3 src/localization/Restore.py --app-dir "/Applications/Antigravity.app" --no-launch
 ```
+
+汉化脚本仍接受旧命令中的 `--no-launch` 参数；无论是否传入，完成后都不会自动启动应用。
 
 汉化会将原版 `resources/app.asar` 改名保留为 `app.asar.disabled`，并生成汉化后的 `resources/app`。**`.disabled` 是恢复原版所需的原始归档，不是代理备份残留，请勿手动删除。** `app.asar.unpacked` 是官方运行依赖，也应保留。
 
@@ -151,7 +153,7 @@ python src/proxy/Setup-Proxy-Shortcuts.py
 - 系统代理关闭时按直连／TUN 处理，并清除继承的代理环境变量。仅通过环境变量提供代理的配置不属于此方案。
 - 工具不检测代理客户端是否运行、端口是否连通、账号是否可用或目标服务是否可达。
 - 自定义或移动到未知位置的快捷方式需要 `--scan-root`，不能保证找到任意位置、其他用户账户或所有 Windows 固定项。
-- 完成后的自动启动失败，不等于汉化／还原文件修改失败；应根据输出分别判断。`--no-launch` 可用于只处理安装文件。
+- 还原完成后的自动启动失败，不等于还原文件修改失败；应根据输出分别判断。还原时可使用 `--no-launch` 只处理安装文件；汉化始终只输出处理结果。
 - 当前翻译依赖应用文件布局。新版本可能需要调整规则；不承诺所有版本、所有文本或所有平台均已验证。
 
 ## 测试与代码说明

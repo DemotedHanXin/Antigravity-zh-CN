@@ -67,7 +67,7 @@ class LocalizationTests(unittest.TestCase):
         self.output.__enter__()
         self.stop = mock.patch.object(PATCHER, 'stop_application')
         self.stop_mock = self.stop.start()
-        self.launch = mock.patch.object(PATCHER, 'launch_application')
+        self.launch = mock.patch.object(PATCHER, 'launch_application', create=True)
         self.launch_mock = self.launch.start()
         # These are Windows-layout fixtures, independent of the test host OS.
         # Production platform guards remain unchanged; process calls stay mocked.
@@ -92,7 +92,7 @@ class LocalizationTests(unittest.TestCase):
     def test_complete_patch_copies_external_dependencies_and_preserves_archive(self):
         make_archive(self.archive, external={'node_modules/dependency.js': b'exported dependency'}, integrity=True)
         original = self.archive.read_bytes()
-        self.assertTrue(PATCHER.apply_patch(self.app, no_launch=True))
+        self.assertTrue(PATCHER.apply_patch(self.app))
         self.assertFalse(self.archive.exists())
         self.assertEqual(self.disabled.read_bytes(), original)
         self.assertEqual((self.work / 'node_modules/dependency.js').read_bytes(), b'exported dependency')
@@ -105,9 +105,10 @@ class LocalizationTests(unittest.TestCase):
     def test_repeat_rebuilds_damaged_working_directory_from_disabled_archive(self):
         make_archive(self.disabled, external={'node_modules/dependency.js': b'dep'})
         self.old_app()
-        PATCHER.apply_patch(self.app, no_launch=True)
+        PATCHER.apply_patch(self.app, no_launch=False)
         self.assertFalse((self.work / 'index.js').exists())
         self.assertEqual((self.work / 'node_modules/dependency.js').read_bytes(), b'dep')
+        self.launch_mock.assert_not_called()
         self.assert_no_temporary()
 
     def test_missing_archive_preserves_only_working_app(self):
