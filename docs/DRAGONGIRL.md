@@ -39,6 +39,12 @@ node localization_runtime/probe.cjs --confirm-network --revision N
 
 将 `N` 替换为您刚核对的 `config.json` 中 `revision` 整数；配置在确认后变化会拒绝请求。推荐使用 GUI，避免手工处理配置版本。命令行不要传入密钥或待翻译的工作内容。
 
+Windows 上，连接测试和 AI 请求每次读取当前用户的系统代理：支持 HTTP/HTTPS 手动代理、HTTP/混合端口、分协议的 `https=...` 设置及代理绕过列表。代理端口不会写死；关闭系统代理后使用直连/TUN，旧进程中的代理环境变量不会覆盖当前 Windows 设置。代理连接失败时会返回错误，不自动改为直连。
+
+macOS/Linux 使用 `HTTPS_PROXY` 或 `ALL_PROXY`（也接受小写），并遵守 `NO_PROXY`；不自动读取 macOS 系统代理。所有平台暂不支持 PAC、纯 SOCKS 和带账号密码的代理。Windows 读取代理配置失败、代理需要认证或无法连接，会在测试结果中显示对应提示。
+
+若测试提示超时，先检查代理客户端已运行、系统代理已开启、线路能够访问提供商。修改代码后重新打开设置工具可加载新的错误提示；只改了表单而未保存时，测试仍使用磁盘上的旧配置。
+
 ## 3. 提供商协议与地址
 
 | GUI 选项 | API 类型 | 默认 Base URL |
@@ -52,7 +58,9 @@ Claude 第一版只支持不需要额外 workspace header 的 workspace-scoped A
 
 填写 **Base URL**，不要重复附加 `/responses`、`/messages`、`/chat/completions` 或 Gemini 模型动作路径；适配器负责添加路径。四种协议不是互相替代的兼容模式。
 
-当前网络层仅允许 HTTPS 公网目标和标准 HTTPS 端口，拒绝内嵌凭据、查询参数、片段、本机/私网解析与重定向认证转发；不支持本地 HTTP 模型服务器。自定义地址会接收该提供商密钥和筛选后的 UI 文案，务必核对主机。TLS 验证不会关闭。现有代理快捷方式工具不意味着新 API 请求已获得系统代理/PAC 支持，实际网络环境需另行验证。
+Google 的 `https://generativelanguage.googleapis.com/v1beta/openai` 应搭配 GUI 的 `compatible` 选项；选 `gemini` 时使用表中的 `/v1beta` 地址。
+
+当前网络层仅允许 HTTPS 公网域名目标，拒绝内嵌凭据、查询参数、片段、本机/私网解析与重定向认证转发；不支持本地 HTTP 模型服务器。自定义地址会接收该提供商密钥和筛选后的 UI 文案，务必核对主机。代理通过 CONNECT 连接经过本机 DNS 校验的公网 IP，隧道内继续校验原 API 域名的 TLS 证书，API 密钥不会放进 CONNECT 请求头。DNS、代理握手、TLS 和响应读取共用总超时。仍需能在本机将 API 域名解析为公网地址；若使用返回保留地址的 Fake-IP 模式，应为 API 域名配置真实 DNS 解析。
 
 ## 4. 用户数据与明文密钥风险
 
@@ -129,7 +137,7 @@ python -B -m unittest discover -s tests -v
 node --test tests/js/*.test.cjs
 ```
 
-使用 Node 22+ 运行开发测试；无 npm 运行时依赖。PowerShell/进程/安装变更测试使用隔离 fixture 和 mock，JavaScript 网络合约测试注入传输，不使用真实密钥或请求。Windows COM 等平台专属检查可能按环境跳过；实际数量和结果以本次运行日志为准。
+使用 Node 22+ 运行开发测试；无 npm 运行时依赖。PowerShell/进程/安装变更测试使用隔离 fixture 和 mock。JavaScript 提供商合约测试注入传输；网络层测试会启动临时回环 HTTP/HTTPS 代理和 TLS 服务，使用 `tests/fixtures/proxy-test-*.pem` 的公开测试证书与虚拟密钥，不调用外部 API。测试证书仅由测试代码显式信任，不安装进系统。受限环境需允许本机回环连接。Windows COM 等平台专属检查可能按环境跳过；实际数量和结果以本次运行日志为准。
 
 CI 工作流仅配置了验证任务，尚未因本地代码修改而在 GitHub 上运行。Linux 模拟通过不等于 Windows/macOS 真机通过；Windows/macOS CI 单元测试也不等于完整 GUI/Antigravity 安装验收。
 

@@ -1,22 +1,9 @@
 'use strict';
 // No Electron dependency: the transport is replaceable for offline contract tests.
-const https = require('node:https');
-const dns = require('node:dns');
 const net = require('node:net');
+const {TranslationError, isPublicAddress, httpsTransport} = require('./network.cjs');
 const PROVIDERS = Object.freeze(['openai', 'gemini', 'claude', 'compatible']);
 const DEFAULTS = Object.freeze({openai:'https://api.openai.com/v1',gemini:'https://generativelanguage.googleapis.com/v1beta',claude:'https://api.anthropic.com/v1',compatible:''});
-class TranslationError extends Error {
-  constructor(code, retryAfterMs = 0) { super(code); this.name='TranslationError'; this.code=code; this.retryAfterMs=retryAfterMs; }
-}
-function isPublicAddress(address) {
-  const a=address.toLowerCase().replace(/^\[|\]$/g,'');
-  if (net.isIPv4(a)) {
-    const p=a.split('.').map(Number);
-    return !(p[0]===0 || p[0]===10 || p[0]===127 || p[0]>=224 || (p[0]===169&&p[1]===254) || (p[0]===172&&p[1]>=16&&p[1]<=31) || (p[0]===192&&p[1]===168) || (p[0]===100&&p[1]>=64&&p[1]<=127) || (p[0]===198&&(p[1]===18||p[1]===19)));
-  }
-  if (net.isIPv6(a)) return /^[23][0-9a-f]{3}:/.test(a) && !/^2001:(?:0{1,4}:|:|0?db8:|0{0,2}10:|0{0,2}20:)|^2002:|^3fff:/.test(a) && !a.includes('.');
-  return false;
-}
 function endpoint(provider, profile) {
   if (!PROVIDERS.includes(provider) || !profile || typeof profile.model!=='string' || !profile.model.trim() || profile.model.length>200 || /[\r\n]/.test(profile.model) || typeof profile.apiKey!=='string' || !profile.apiKey.trim() || /[\r\n]/.test(profile.apiKey)) throw new TranslationError('invalid_configuration');
   if(typeof profile.baseUrl!=='string'||profile.baseUrl.length>2048||/[\s\\]/.test(profile.baseUrl))throw new TranslationError('invalid_endpoint');
@@ -49,29 +36,6 @@ function buildRequest(provider, profile, items) {
     body={model:profile.model,messages:[{role:'system',content:INSTRUCTION},{role:'user',content:input}],max_tokens:2048};
   }
   return {url,headers,body};
-}
-function safeLookup(hostname, options, callback) {
-  dns.lookup(hostname,{all:true},(error,addresses)=>{
-    if(error || !addresses?.length || addresses.some(({address})=>!isPublicAddress(address))) return callback(new TranslationError('unsafe_endpoint'));
-    if(options.all) callback(null,addresses); else callback(null,addresses[0].address,addresses[0].family);
-  });
-}
-function httpsTransport({url,headers,body,signal,timeoutMs=15000}) {
-  return new Promise((resolve,reject)=>{
-    const bytes=Buffer.from(JSON.stringify(body));
-    const request=https.request(url,{method:'POST',headers:{...headers,'content-length':bytes.length},signal,lookup:safeLookup},response=>{
-      let size=0; const chunks=[];
-      response.on('data',chunk=>{size+=chunk.length;if(size>128*1024){request.destroy();reject(new TranslationError('response_too_large'));}else chunks.push(chunk);});
-      response.on('end',()=>{
-        let value; try {value=JSON.parse(Buffer.concat(chunks).toString('utf8'));} catch(_){value=null;}
-        resolve({status:response.statusCode,headers:response.headers,body:value});
-      });
-      response.on('error',()=>reject(new TranslationError('network_error')));
-    });
-    request.setTimeout(timeoutMs,()=>request.destroy(new TranslationError('timeout')));
-    request.on('error',error=>reject(error instanceof TranslationError?error:new TranslationError(signal?.aborted?'cancelled':'network_error')));
-    request.end(bytes);
-  });
 }
 function placeholders(text) {return (text.match(/\{\{[^{}]+\}\}|\{[^{}]+\}|\$\{[^{}]+\}|%(?:\d+\$)?[sdif]|%\w+%/g)||[]).sort();}
 function validTranslation(source,text) {

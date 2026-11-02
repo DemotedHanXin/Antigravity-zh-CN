@@ -11,7 +11,7 @@ import sys
 
 from antigravity_common import _contained
 
-RUNTIME_FILES = ('main.cjs', 'providers.cjs', 'storage.cjs', 'bootstrap.cjs')
+RUNTIME_FILES = ('main.cjs', 'providers.cjs', 'network.cjs', 'storage.cjs', 'bootstrap.cjs')
 REGISTRY = 'compatibility.json'
 
 
