@@ -1,8 +1,8 @@
 # 项目状态与代码说明
 
-更新日期：2026-11-02。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次修复。日常使用命令见 [README.md](README.md)，英文说明见 [README_EN.md](README_EN.md)。
+更新日期：2026-11-03（Asia/Shanghai）。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次改动。日常使用命令见 [README.md](README.md)，英文说明见 [README_EN.md](README_EN.md)。
 
-Windows 管理器开发已建立 [M0 基线与开发约定](docs/development/M0-baseline.md) 和 [阶段进度](docs/development/PROGRESS.md)：固定在 `feat/DragonGirl` 开发，每阶段记录、提交、打附注标签并等待用户审核。当前仅 M0 文档交付待审，M1 真实接入尚未开始；本文已有实现不因计划建立而改变。当前同一代码基线的隔离测试为 Python 129 项（127 通过、2 跳过）、JavaScript 94 项（93 通过、1 跳过），来源与验证边界见 M0 记录；下文历史计数保留各自日期语境。
+Windows 管理器开发已建立 [M0 基线与开发约定](docs/development/M0-baseline.md) 和 [阶段进度](docs/development/PROGRESS.md)：固定在 `feat/DragonGirl` 开发，每阶段记录、提交、打附注标签并等待用户审核。M0 已获批准；M1 限定范围的实现和实测已完成，待阶段审核；M2 尚未开始。最新回归结果、证据和交审状态统一记录在 [M1 阶段文档](docs/development/M1-real-integration.md)，下文历史计数保留各自日期语境。
 
 ## 0. DragonGirl 开发版增量与验证边界
 
@@ -10,11 +10,15 @@ Windows 管理器开发已建立 [M0 基线与开发约定](docs/development/M0-
 
 新增独立 `src/localization/Translation-Settings.py` / `src/localization/translation_config.py` 管理用户配置和个人词典，`localization_runtime/` 提供安全 DOM 管线、主进程 IPC、队列/缓存、四类 API 适配器及显式连接测试；`src/localization/translation_integration.py` 将桥接注入限制在已审核的应用指纹 profile 中。`src/localization/Inspect-Translation-Compatibility.py` 只读检查已解包副本，不会启用 AI。
 
-**实际发货注册表 `profiles` 为空：没有真实应用 profile，真实安装不启用个人词典/AI 桥接。** 现有同步词典汉化继续保留。测试 fixture 的可信窗口、DOM 和摘要只用于验证机制，不能写成真实版本支持声明。
+源码注册表包含 **`antigravity-2.28.2-win32-x64-navigation`**，范围为已验证的 Antigravity 2.28.2 / Windows x64 样本。匹配核对应用入口、preload、窗口／服务模块及外置 `resources/bin/language_server.exe` 的指纹；运行时绑定实际 Hub 窗口、服务进程与动态本地端口。版本号相同但指纹不同，也不能直接视为兼容。
+
+匹配版本重新汉化后会停用旧的广域 DOM observer，网页翻译仅覆盖根路径 `/`、无 query/hash 的 **New Conversation、Automations、Customizations、Settings 四个导航正文标签**。Projects、其他页面正文和同名 aria-label 不在范围内；原生菜单仍使用静态汉化。未匹配版本沿用原有同步汉化路径。当前四标签全部命中内置词典，正常使用不会由它们触发自然未命中的 AI 请求。
+
+Windows 隔离副本已实测受控未命中的成功／失败／关闭、导航返回、设置页边界、设置工具关闭时运行、归档恢复与解包重建，以及同一应用和窗口内的服务恢复。受控提供方返回本地固定译文，没有调用真实外部 AI。源码更新不会自行改动日常安装；应用新 profile 需要另行对明确目标执行汉化。阶段交审不代表发布或用户已批准。
 
 - 默认关闭 AI 与自动保存；原生菜单不接 AI。密钥只保存在用户目录，由主进程使用，不返回网页；明文风险在 GUI 中提示。
 - 用户目录独立于安装和还原范围；JSON 版本、跨进程锁、原子替换、删除记录防止覆盖/复活旧词条。
-- 双平台真机桥接、实际 UI 白名单、GUI 外观/冻结包和真实提供商调用尚需验收。
+- macOS 桥接、四标签之外的 UI 范围、GUI 外观／冻结包和真实提供方页面补译尚未验收。纯 `app.asar` 布局启动未验证；已通过的恢复路径为归档切换、完整性检查、解包重建后启动和登录保留。
 - 现有测试的 Windows fixture 已显式模拟平台，保留生产的 Windows/macOS 安装限制；Linux 开发测试不扩展生产平台支持。
 - 新工作流定义只代表 CI 配置，不代表已在 GitHub 执行或通过；当前开发没有推送或发布。
 
@@ -60,7 +64,7 @@ Python 源码集中在 `src/` 的两个目录：`localization/` 保存原作者�
 | [src/proxy/Setup-Proxy-Shortcuts.py](src/proxy/Setup-Proxy-Shortcuts.py) | 启动器模板、Windows 快捷方式 COM 桥接、扫描、策略检查、目录元数据与 `install()` |
 | [src/proxy/Cleanup-Proxy-Shortcuts.py](src/proxy/Cleanup-Proxy-Shortcuts.py) | 加载同目录 Setup 工具函数；`plan_cleanup()` 计划修改，`apply_cleanup()` 改回 EXE 后删除启动器 |
 | [localization_runtime](localization_runtime) | JavaScript 运行时、连接测试探针与兼容注册表 |
-| [tests](tests) | 隔离样例与回归测试，不以真实安装作为写入目标 |
+| [tests](tests) | 自动测试使用 fixture／mock；`tests/manual/` 仅供用户操作独立实验副本，不用于日常安装 |
 
 分发源码时保留 `src/localization/` 中的同目录模块及根目录 `localization_runtime/`。桥接和 GUI 共用 `resource_root()`：源码按 `__file__` 定位仓库根，PyInstaller 包按 `_MEIPASS` 定位资源。Cleanup 使用 `runpy.run_path()` 读取同目录 Setup 的定义，不会执行它的命令行入口。
 
@@ -150,7 +154,7 @@ Python 测试通过 `tests/source_paths.py` 定位迁移后的模块，JavaScrip
 | 工具 | 参数 | 说明 |
 | --- | --- | --- |
 | Patcher / Restore | `--app-dir` | 明确选择安装目录或 macOS `.app` |
-| Patcher / Restore | `--no-launch` | 文件操作完成后不自动启动；不等于禁止操作前关闭应用 |
+| Patcher / Restore | `--no-launch` | Restore 用于禁止完成后启动；Patcher 为兼容旧命令仍接受，但汉化始终不自动启动；均不禁止操作前关闭目标应用 |
 | Setup / Cleanup | `--app-dir` | 选择包含 `Antigravity.exe` 的 Windows 安装目录 |
 | Setup / Cleanup | `--scan-root` | 额外扫描快捷方式目录，可重复使用 |
 | Setup / Cleanup | `--dry-run` | 预览，不创建、修改或删除安装文件及快捷方式 |
@@ -190,6 +194,6 @@ python -B -m unittest discover -s tests -v
 
 ## 7. 后续维护建议
 
-新增翻译优先修改 Patcher 中的字典与注入代码；新增归档处理逻辑放在公共模块；Windows 启动器与 COM 桥接集中在 Setup。修改涉及安装文件切换时，应先添加失败路径回归测试，再考虑正常流程。
+新增翻译优先修改 Patcher 中的字典与注入代码；匹配 M1 profile 时仍受四个固定导航标签的白名单限制，扩展 UI 范围须补充对应验证。新增归档处理逻辑放在公共模块；Windows 启动器与 COM 桥接集中在 Setup。修改涉及安装文件切换时，应先添加失败路径回归测试，再考虑正常流程。
 
 发布前应在目标版本的干净安装上验证：英文启动、汉化启动、核心依赖功能、还原启动、代理配置、代理清理、无效输入保护。不要仅凭单元测试通过宣称所有版本完全兼容。

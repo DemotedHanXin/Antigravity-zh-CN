@@ -1,8 +1,12 @@
 # DragonGirl 验证记录
 
-日期：2026-10-26；执行环境：Linux 云工作区。起点 `feat/Fly`：`c18e0eaa40a8ac7effaf01c78663ff51f81434d7`；开发分支 `feat/DragonGirl`。
+当前状态（2026-11-03，Asia/Shanghai）：M0 已获批准；M1 限定范围实现与实测已完成，待阶段审核；M2 尚未开始。最新测试结果和阶段交付以 [M1 记录](development/M1-real-integration.md) 与 [开发进度](development/PROGRESS.md) 为准。下文按日期保留历史结果，早期“尚未验证／profiles 为空”仅描述当时状态。
 
-## 已完成
+## 2026-10-26：DragonGirl 初始开发（Linux）
+
+执行环境：Linux 云工作区。起点 `feat/Fly`：`c18e0eaa40a8ac7effaf01c78663ff51f81434d7`；开发分支 `feat/DragonGirl`。
+
+### 当日已完成
 
 - 只读核对远端 `feat/Fly` 与实施基线一致，未覆盖任何用户未提交修改。
 - 基线原 86 项测试在 Linux 出现 3 failures / 14 errors（另 1 skip）；仅修正测试中的 Windows fixture 平台/模拟子进程常量，不放宽生产平台支持。新增 Linux 拒绝用例。
@@ -14,7 +18,7 @@
 - 四种 provider 请求体/响应解析均用 mock transport 测试，未使用真实密钥或发起真实 API 请求。
 - 独立只读审查发现的三项问题已修复并复核：有效批次子集不被无效兄弟条目阻断；发 IPC 前重新检查排除区域/原文/版本；按实际 pretty-JSON UTF-8 字节数预检写入上限，拒绝时旧有效词典字节不变。
 
-## 仍未完成，不能当作通过
+### 当日尚未完成的项目
 
 - **没有真实应用 ASAR/DOM 样本可验证；出厂 compatibility profiles 为空。真实 Antigravity 中个人词典/AI 桥接尚不启用。** 现有内置词典汉化保持原路径。
 - Windows/macOS 真机启动、实际隐私筛选区域、CJS bootstrap 与原程序入口语义/时序兼容性待验证。
@@ -23,7 +27,7 @@
 - 未做真实提供商/模型/费用、系统代理/PAC、Windows ACL 验证。Claude 首版不支持需要额外 workspace header 的非 workspace-scoped key。
 - 本地提交不等于远端已有代码；未推送、建远程分支/PR、发布 Release。远程写权限按用户安排延后。
 
-下一道门槛是取得授权应用副本，在隔离环境验证入口、窗口、preload 与精确 UI 白名单，并完成对应系统真机回归；不能仅添加哈希就声称兼容。详细使用及验证要求见 [DRAGONGIRL.md](DRAGONGIRL.md)。
+当时的下一道门槛是取得授权应用副本，在隔离环境验证入口、窗口、preload 与精确 UI 白名单，并完成对应系统真机回归；不能仅添加哈希就声称兼容。后续 Windows M1 验证见本文 2026-11-03 条目；详细使用及边界见 [DRAGONGIRL.md](DRAGONGIRL.md)。
 
 ## 2026-11-01：源码目录整理（Windows）
 
@@ -49,4 +53,20 @@
 - `python -B -m unittest discover -s tests -q`：**129 项，127 项通过，2 项按环境跳过，无失败**。Python 测试临时目录仅在测试进程内改为仓库下唯一目录，测试后已删除。
 - 通过修复后的共用网络层进行一次**不携带密钥**的 Google 官方接口请求，自动使用当前系统代理 `127.0.0.1:10808`，约 **1.56 秒返回 HTTP 403**。该结果仅证明网络与 TLS 路径可达，不证明用户密钥、模型权限或翻译响应有效。
 
-带密钥的真实连接测试尚未执行；真实 Antigravity 桥接、冻结包和 macOS 真机仍未验收。未修改用户 API 配置、系统代理、快捷方式或真实应用安装。
+截至本轮连接测试修复结束，带密钥的真实连接测试尚未执行，真实 Antigravity 桥接、冻结包和 macOS 真机仍未验收。本轮未修改用户 API 配置、系统代理、快捷方式或真实应用安装。
+
+## 2026-11-03：M1 限定真实版本接入（Windows）
+
+目标为用户授权的 Antigravity 2.28.2 / Windows x64 隔离副本。用户执行实际启动、界面操作及服务恢复测试；助手核对受限结构化报告与源码、完成无界面回归。测试记录、命令、完整结果和跳过项集中在 [M1 阶段记录](development/M1-real-integration.md)，本节不重复可能变化的测试总数。
+
+- 已验证实际 Hub 窗口、Electron preload、动态本地 HTTPS 服务及四个固定导航正文标签；运行安全开关保持 contextIsolation=true、sandbox=true、nodeIntegration=false。
+- 本地受控提供方验证人为未命中的成功显示、失败保留英文、启动时关闭零请求；正常及较快关闭 Settings 返回主页后恢复显示，设置工具关闭时仍可工作。
+- 同次运行在带 query 的 Settings 页面停留 16.216 秒，状态请求继续但授权、翻译和提供方计数未增加，诊断未采样其 DOM。该实测不外推为所有路由或在途导航情形均已验收。
+- 原始归档切换、归档哈希／入口／依赖完整性、解包副本重建、重新启动与登录保留通过；纯 `app.asar` 布局启动未验证。
+- 一次用户显式触发的实际服务终止后，应用 session、主进程及窗口保持，服务代次由 1 变为 2，窗口连接新服务端口并恢复授权与测试译文，preloadErrors=0。恢复前的短暂 `no_eligible_window` 报告也保留；最终采样间隔不能作为准确恢复耗时。
+
+源码注册表纳入 `antigravity-2.28.2-win32-x64-navigation`，按入口、preload、窗口／服务模块及外置 `language_server.exe` 的指纹匹配。**匹配后重新汉化会停用旧广域 DOM observer，只保留 `/` 且无 query/hash 的 New Conversation、Automations、Customizations、Settings 四个导航正文标签翻译**；原生菜单保持静态汉化，未匹配版本保留原有同步路径。
+
+四个标签均已有内置译文，正常使用没有由这些标签产生的自然未命中。受控助手对 Automations 人为制造未命中并返回固定译文，证明的是桥接链路，不是真实外部提供方页面翻译。正式 profile 不含测试绕过，也不放开 Projects、同名 aria-label 或其他页面内容。
+
+本轮源码更新不会自行修改日常安装；适用范围扩大需要新的验证。M1 仍待用户阶段审核，不代表发布批准；真实提供方页面补译、macOS、GUI／冻结包和安装程序等未验证事项分别保留在阶段／发布计划中。

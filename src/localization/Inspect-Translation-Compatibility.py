@@ -10,10 +10,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='只读检查已解包的应用副本；不会启用 AI、修改安装或发送网络请求。')
     parser.add_argument('extracted_app', type=Path, help='包含 package.json 的已解包应用副本')
     parser.add_argument('--ui-file', action='append', default=[], help='要核对的 UI 资源相对路径，可重复')
+    parser.add_argument('--resources-dir', type=Path, help='显式指定安装 resources 目录；不从应用副本位置推测')
+    parser.add_argument('--resource-file', action='append', default=[], help='resources 目录内的来源文件相对路径，可重复')
     args = parser.parse_args(argv)
     try:
-        report = fingerprints(args.extracted_app, args.ui_file)
-        profile = select_profile(args.extracted_app)
+        report = fingerprints(args.extracted_app, args.ui_file,
+                              resources_root=args.resources_dir, resource_files=args.resource_file)
+        profile = select_profile(args.extracted_app, resources_root=args.resources_dir)
         report['matchedProfile'] = profile['id'] if profile else None
         print(json.dumps(report, ensure_ascii=False, indent=2))
         return 0

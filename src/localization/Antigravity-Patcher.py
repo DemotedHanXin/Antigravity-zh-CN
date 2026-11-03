@@ -901,13 +901,21 @@ def replace_in_file(file_path, target, replacement):
 REQUIRED_PATCH_FILES = ('dist/preload.js', 'dist/menu.js', 'dist/tray.js')
 
 
-def _inject(stage):
+def build_dom_injection(profile=None):
+    """A reviewed UI uses one observer; unreviewed versions retain legacy behavior."""
+    if profile is None:
+        return DOM_TRANSLATOR_INJECTION
+    marker = '  const observer = new MutationObserver'
+    if DOM_TRANSLATOR_INJECTION.count(marker) != 1:
+        raise ValueError('词典注入结构改变，无法安全构造受限 UI 管线')
+    # Keep dictionary/rule functions but never start the old unrestricted scan.
+    return DOM_TRANSLATOR_INJECTION.split(marker, 1)[0] + preload_extension(profile) + '\n})();\n'
+
+
+def _inject(stage, resources_root=None):
     # Match pristine, validated stage bytes before any localization changes.
-    profile = select_profile(stage)
-    dom_injection = DOM_TRANSLATOR_INJECTION
-    if profile is not None:
-        dom_injection = dom_injection.replace('  const observer = new MutationObserver',
-            preload_extension(profile) + '\n  const observer = new MutationObserver', 1)
+    profile = select_profile(stage, resources_root=resources_root)
+    dom_injection = build_dom_injection(profile)
     append_once(stage / 'dist/preload.js', dom_injection,
                 'Antigravity Chinese Localization Engine', 'Web UI Injection')
     append_once(stage / 'dist/menu.js', MENU_TRANSLATOR_INJECTION,
@@ -957,7 +965,7 @@ def apply_patch(app_dir=None, no_launch=True):
     try:
         extract_asar(source, stage, unpacked_dir=resources / 'app.asar.unpacked')
         validate_extracted_app(stage, REQUIRED_PATCH_FILES)
-        _inject(stage)
+        _inject(stage, resources_root=resources)
         validate_extracted_app(stage, REQUIRED_PATCH_FILES)
         prepared = True
         if _stamp(source) != before:

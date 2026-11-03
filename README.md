@@ -4,17 +4,21 @@
 
 为 Antigravity 桌面端提供中文界面补丁、汉化还原，以及 Windows 代理启动与快捷方式管理。运行脚本使用 Python 标准库，不需要安装 pip 依赖。
 
-本分支基于 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN) 扩展。翻译规则以 v2.21.1 的文件结构为基础，不保证所有版本的文本覆盖率。本次修复针对仓库中的 **Python 源码**；旧版 Release 中的可执行程序需要重新打包后才包含这些修复。
+本分支基于 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN) 扩展。原有翻译规则以 v2.21.1 的文件结构为基础；新增的 2.28.2 接入范围见下文，不保证所有版本的文本覆盖率。本次开发针对仓库中的 **源码**；旧版 Release 中的可执行程序需要重新打包后才包含这些改动。
 
 ## Windows 管理器分阶段开发
 
-后续在 `feat/DragonGirl` 上按 M0–M5 顺序开发 Python + PySide6 管理器。每阶段交付记录文档、本地提交和附注标签，等待用户审核通过后才继续；不自动推送、合并或发布。当前 **M0 文档基线已交付，待审核，M1 尚未开始**。
+在 `feat/DragonGirl` 上按 M0–M5 顺序开发 Python + PySide6 管理器。每阶段交付记录文档、本地提交和附注标签，等待用户审核通过后才继续；不自动推送、合并或发布。当前 **M0 已获批准；M1 限定范围的实现和实测已完成，待阶段审核；M2 尚未开始**。
 
 需求、使用与启动规划见 [M0 基线与开发约定](docs/development/M0-baseline.md)，阶段状态及下一步见 [开发进度](docs/development/PROGRESS.md)。PySide6 管理器、个人词典优先、7 天候选缓存和 Windows 安装包均为后续目标；下文仍描述当前已有脚本。
 
 ## DragonGirl 开发版：请先了解状态
 
-**本分支新增了可选 AI 补译组件，但尚未提供真实应用验证过的兼容 profile。** 当前 `profiles` 为空，真实应用仍使用原有内置词典汉化；不会仅因填写密钥就开始 AI 补译。
+**M1 源码提供 Antigravity 2.28.2 / Windows x64 的限定兼容 profile：`antigravity-2.28.2-win32-x64-navigation`，仍待阶段审核，未发布。** 匹配同时核对入口、preload、窗口／服务模块及外置 `language_server.exe` 的指纹，并绑定实际应用窗口与动态本地服务。
+
+重新汉化匹配版本时，旧的广域 DOM observer 会停用，网页翻译范围缩小为根路径 `/`、无 query/hash 时的四个导航正文标签：**New Conversation、Automations、Customizations、Settings**。其他页面正文、Projects 和同名 aria-label 不在此 profile 范围内；原生菜单仍沿用静态汉化。未匹配版本保留原有同步汉化路径。
+
+这四个标签目前都命中内置词典，正常运行不会由它们产生自然未命中的 AI 请求。隔离实测通过人为未命中和本地固定提供方验证了请求、显示、失败、关闭、导航及服务恢复链路，**没有验证真实提供方的页面补译**。仅更新仓库源码不会修改日常安装；需另行对目标安装执行汉化才会应用新 profile。
 
 - 独立 GUI：`python src/localization/Translation-Settings.py`，需要带 Tk 的 Python/桌面环境。
 - 内置词典/规则 → 个人词典 → AI；AI 和自动保存译文默认关闭，原生菜单不接 AI。
@@ -22,7 +26,7 @@
 - 密钥明文保存在用户目录，保存前明确提示；配置/个人词典不会随汉化更新或还原删除。
 - 连接测试为单独、需确认的可能计费操作，需要外部 Node；通过不表示真实应用桥接可用。
 
-完整使用方式、隐私边界、只读兼容检查、打包与尚未验证项目见 [DragonGirl 说明](docs/DRAGONGIRL.md)。**Windows/macOS 真机桥接及 GUI/冻结包仍需验收，不是已经发布的兼容版本。**
+完整使用方式和边界见 [DragonGirl 说明](docs/DRAGONGIRL.md)；实测证据、最新回归结果及未验证范围见 [M1 阶段记录](docs/development/M1-real-integration.md)。macOS 桥接、真实 AI 页面补译、GUI／冻结包及完整应用覆盖仍未验收。
 
 ## 原有功能与修复
 
@@ -177,7 +181,7 @@ node --test tests/js/*.test.cjs
 
 ![Antigravity 中文界面示例](antigravity-chinese.png)
 
-示例不代表所有版本、动态内容或模型输出均已翻译。新增词条可修改 `src/localization/Antigravity-Patcher.py` 中的翻译字典，再运行汉化脚本。
+这是历史界面示例，不代表 M1 的覆盖范围或所有版本、动态内容、模型输出均已翻译。新增词条可修改 `src/localization/Antigravity-Patcher.py` 中的翻译字典；匹配 M1 profile 时，新增词条仍受四个固定导航标签的范围限制，扩大范围需要另行验证兼容配置。
 
 ## 贡献与许可
 

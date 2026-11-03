@@ -1,5 +1,94 @@
 {
   "schemaVersion": 1,
-  "profiles": [],
-  "note": "No real application build has been validated. Unknown builds retain dictionary-only localization. Never add a profile from hashes alone."
+  "profiles": [
+    {
+      "name": "antigravity",
+      "version": "2.28.2",
+      "main": "dist/main.js",
+      "moduleType": "commonjs",
+      "files": {
+        "package.json": "7ea0adacdc71b02eb0bb6b79b8fa3de9330f8ba70861b1fa84d6a102333ab878",
+        "dist/main.js": "66fa884c96dee5dd6a536711d35fc90fee853e9a2eede40fb4d1ab576e4ea50f",
+        "dist/preload.js": "1b702d07b8415afdb41d27d62515fa88ce91d31dbc15e9dc6cc7ae80dddb0c7b",
+        "dist/utils.js": "2f39dd7b944436bd5007297ccc15c42c897d8e6cecd5a0af93bdf6bfc1708b12",
+        "dist/languageServer.js": "5c781d05050506d7643a88b1eeadc9bb4f320d7133f84b075e6338a6ce158d26",
+        "dist/constants.js": "769ad44506db2723f25c831f63d55cf6409a71ff0c8a6b7db601da184c4f786b"
+      },
+      "resourcesFiles": {
+        "bin/language_server.exe": "a51a80eb1b355dc523dd9a6d7cec098ad450e3c9fb30d6001806cac86814f37b"
+      },
+      "schemaVersion": 1,
+      "id": "antigravity-2.28.2-win32-x64-navigation",
+      "verified": true,
+      "preload": "dist/preload.js",
+      "uiResources": [
+        "bin/language_server.exe"
+      ],
+      "windowBinding": {
+        "kind": "antigravity-local-hub-v1",
+        "paths": [
+          "/"
+        ]
+      },
+      "policy": {
+        "verified": true,
+        "paths": [
+          "/"
+        ],
+        "rules": [
+          {
+            "selector": "#root > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > a:nth-of-type(1) > span:nth-of-type(2)",
+            "contextKind": "navigation",
+            "text": true,
+            "sourceTexts": [
+              "New Conversation"
+            ]
+          },
+          {
+            "selector": "#root > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > button:nth-of-type(1) > span:nth-of-type(2)",
+            "contextKind": "navigation",
+            "text": true,
+            "sourceTexts": [
+              "Automations"
+            ]
+          },
+          {
+            "selector": "#root > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > a:nth-of-type(2) > span:nth-of-type(2)",
+            "contextKind": "navigation",
+            "text": true,
+            "sourceTexts": [
+              "Customizations"
+            ]
+          },
+          {
+            "selector": "#root > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(6) > button:nth-of-type(1) > span:nth-of-type(2)",
+            "contextKind": "navigation",
+            "text": true,
+            "sourceTexts": [
+              "Settings"
+            ]
+          }
+        ]
+      },
+      "review": {
+        "stage": "M1",
+        "stageApproval": "pending",
+        "runtimeValidation": "scoped",
+        "validatedOn": "2026-11-03",
+        "platform": "win32",
+        "architecture": "x64",
+        "scope": "Root route without query or fragment; four audited navigation text labels only.",
+        "providerValidation": "controlled-local-response-only",
+        "evidenceDocument": "docs/development/M1-real-integration.md",
+        "serviceRecoveryReport": "ui-a8ad2d9da734111136c688d8e73d288d.json",
+        "limitations": [
+          "Settings, query/fragment routes, Projects and other UI regions are not supported.",
+          "All four production source labels currently match the built-in dictionary; no natural AI miss is claimed.",
+          "Controlled runtime evidence does not validate an external AI provider.",
+          "The reviewed DOM pipeline replaces the legacy broad observer for this exact build."
+        ]
+      }
+    }
+  ],
+  "note": "Only the exact reviewed 2.28.2 Windows x64 build and four navigation labels are covered. M1 awaits user stage review; this is not full UI, external AI provider or release acceptance. Unknown builds retain dictionary-only localization."
 }

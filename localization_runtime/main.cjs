@@ -107,28 +107,35 @@ const installed=new WeakMap();
 function installIpc({ipcMain,service=createService()}={}){
   if(!ipcMain||typeof ipcMain.handle!=='function')throw new TranslationError('invalid_ipc');
   if(installed.has(ipcMain))return installed.get(ipcMain);
-  const trusted=new Map();let disposed=false;
-  function registerTrustedWindow(webContents,exactUrl){
+  const trusted=new Map();let disposed=false,pageEpoch=0;
+  function registerTrustedWindow(webContents,exactUrl,guard=()=>true){
     if(disposed||!webContents||typeof exactUrl!=='string'||!exactUrl||exactUrl.length>4096)throw new TranslationError('invalid_window');
     let u;try{u=new URL(exactUrl);}catch(_){throw new TranslationError('invalid_window');}
     if(['http:','data:','javascript:','about:'].includes(u.protocol)||u.username||u.password)throw new TranslationError('invalid_window');
+    if(typeof guard!=='function'||guard()!==true)throw new TranslationError('unsafe_window');
     const prefs=webContents.getLastWebPreferences?.();
     if(!prefs||prefs.contextIsolation!==true||prefs.sandbox!==true||prefs.nodeIntegration!==false||webContents.isDestroyed?.())throw new TranslationError('unsafe_window');
+    if(pageEpoch>=Number.MAX_SAFE_INTEGER)throw new TranslationError('invalid_window');
     trusted.get(webContents)?.revoke();
-    const entry={exactUrl,times:[],revoke:null};
-    const revoke=()=>{trusted.delete(webContents);webContents.removeListener?.('did-start-navigation',onNavigate);webContents.removeListener?.('destroyed',revoke);};
+    // Re-entering the same URL is a new page lifetime even when no poll saw the
+    // intervening unauthorized route. Keep this counter out of user storage.
+    const entry={exactUrl,guard,pageEpoch:++pageEpoch,times:[],revoke:null};
+    const revoke=()=>{if(trusted.get(webContents)===entry)trusted.delete(webContents);webContents.removeListener?.('did-start-navigation',onNavigate);webContents.removeListener?.('destroyed',revoke);};
     const onNavigate=(_event,_url,isInPlace,isMainFrame)=>{if(isMainFrame!==false)revoke();};
     entry.revoke=revoke;trusted.set(webContents,entry);webContents.on?.('did-start-navigation',onNavigate);webContents.on?.('destroyed',revoke);
     return revoke;
   }
-  function authorize(event){
+  function authorize(event,expectedEntry){
     const wc=event?.sender,entry=trusted.get(wc);
-    if(!entry||wc.isDestroyed?.()||event.senderFrame!==wc.mainFrame||event.senderFrame?.url!==entry.exactUrl||wc.getURL?.()!==entry.exactUrl)throw new TranslationError('unauthorized');
+    if(!entry||(expectedEntry&&entry!==expectedEntry)||wc.isDestroyed?.()||event.senderFrame!==wc.mainFrame||event.senderFrame?.url!==entry.exactUrl||wc.getURL?.()!==entry.exactUrl)throw new TranslationError('unauthorized');
+    const prefs=wc.getLastWebPreferences?.();
+    if(!prefs||prefs.contextIsolation!==true||prefs.sandbox!==true||prefs.nodeIntegration!==false||entry.guard()!==true){entry.revoke();throw new TranslationError('unauthorized');}
     const now=Date.now();entry.times=entry.times.filter(t=>now-t<1000);if(entry.times.length>=20)throw new TranslationError('ipc_rate_limited');entry.times.push(now);
+    return entry;
   }
   const denied=()=>({version:1,status:'unauthorized',translations:[]});
-  ipcMain.handle(CHANNELS.snapshot,async(event,request)=>{try{authorize(event);if(!request||Object.keys(request).join(',')!=='version'||request.version!==1)return denied();const result=await service.snapshot();authorize(event);return result;}catch(_){return denied();}});
-  ipcMain.handle(CHANNELS.translate,async(event,request)=>{try{authorize(event);const result=await service.translate(request);authorize(event);return result;}catch(_){return denied();}});
+  ipcMain.handle(CHANNELS.snapshot,async(event,request)=>{try{const entry=authorize(event);if(!request||Object.keys(request).join(',')!=='version'||request.version!==1)return denied();const result=await service.snapshot();authorize(event,entry);return {...result,pageEpoch:entry.pageEpoch};}catch(_){return denied();}});
+  ipcMain.handle(CHANNELS.translate,async(event,request)=>{try{const entry=authorize(event);const result=await service.translate(request);authorize(event,entry);return result;}catch(_){return denied();}});
   function dispose(){disposed=true;for(const entry of [...trusted.values()])entry.revoke();ipcMain.removeHandler?.(CHANNELS.snapshot);ipcMain.removeHandler?.(CHANNELS.translate);service.close();installed.delete(ipcMain);}
   const api={registerTrustedWindow,dispose,service};installed.set(ipcMain,api);return api;
 }

@@ -1,6 +1,6 @@
 # DragonGirl：AI 补译开发版使用与验证说明
 
-> **当前没有经过真实 Antigravity 安装验证的兼容配置。** 随源码提供的 `localization_runtime/compatibility.json` 中 `profiles` 为空。现有内置词典汉化继续使用；真实应用中的个人词典接入和 AI 补译不会自动启用。保存配置、连接测试通过、模拟测试通过，都不等于真实应用桥接已经可用。
+> **M1 已完成 Antigravity 2.28.2 / Windows x64 的限定范围实现和实测，待阶段审核，未发布。** 源码注册表中的 profile 为 `antigravity-2.28.2-win32-x64-navigation`，只覆盖下述四个导航正文标签。M0 已获批准，M2 尚未开始；最新回归结果和交审状态见 [M1 阶段记录](development/M1-real-integration.md) 与 [开发进度](development/PROGRESS.md)。更新源码不会自行改动日常安装。
 
 ## 1. 已提供的组件与明确边界
 
@@ -10,9 +10,26 @@
 - 默认空白名单的 DOM 补译模块，异步回写前检查原文、节点、导航和配置/词典版本。
 - 只读兼容性检查工具与受指纹约束的注入流程。只有经审查的匹配 profile 才可以增加主进程桥接；没有匹配时保留原有同步汉化。
 
-这些组件可通过隔离模拟测试检查，但 **Windows/macOS 真机桥接、目标应用 UI 白名单、原生 GUI 外观、冻结包运行以及真实提供商兼容性仍需独立验收**。本分支没有把真实 API 请求或完整应用验收当作已经通过。
+M1 在 Windows 隔离副本实测了窗口／preload 接入、动态服务绑定、受控未命中的成功／失败／关闭、导航恢复、设置页停留边界、设置工具关闭时运行、归档恢复与解包重建，以及同一应用／窗口内的服务恢复。**真实提供方页面补译、macOS 桥接、完整 UI 覆盖、原生 GUI 外观和冻结包运行仍未验收。** 固定文案连接测试通过也不能替代页面补译验收。
 
-翻译顺序为内置词典/规则 → 个人词典 → AI；个人词典不覆盖内置命中。AI 失败、关闭或响应不合法时保留原文。原生菜单仍使用现有内置词典，不接个人词典和 AI。配置和词典编辑可以先使用；没有真实兼容 profile 时，它们不会注入实际应用页面。
+当前翻译顺序为内置词典/规则 → 个人词典 → AI；个人词典不覆盖内置命中。AI 失败、关闭或响应不合法时保留原文。原生菜单仍使用现有内置词典，不接个人词典和 AI。个人词典优先、7 天待确认译文及采纳／拒绝流程属于尚未开始的 M2；现有“自动保存”开关不是该审核流程。
+
+### M1 实际覆盖范围
+
+profile 同时核对应用入口、preload、窗口／服务模块和外置 `resources/bin/language_server.exe` 的指纹。匹配后重新汉化会停用旧的广域 DOM observer，网页翻译仅处理实际 Hub 窗口中根路径 `/`、无 query/hash 时的以下导航正文：
+
+| 固定原文 | 当前内置译文 |
+| --- | --- |
+| New Conversation | 新建对话 |
+| Automations | 自动化 |
+| Customizations | 自定义 |
+| Settings | 设置 |
+
+Projects、同名 aria-label、其他页面正文及带 query/hash 页面均不在此 profile 的翻译范围内；聊天、代码、输入、终端和内嵌网页不应为扩大覆盖而加入白名单。未匹配版本继续走原有同步汉化路径，其范围不能当作 M1 已验证范围。
+
+这四个标签现在全部命中内置词典，因此正常运行不会由它们触发自然未命中的 AI 请求。实验助手只对 Automations 人为制造未命中，再由本地固定提供方返回“自动化（测试译文）”，用于验证桥接链路；正式 profile 不包含这个测试绕过。填写密钥或启用 AI 不会扩大允许区域，也不会使已命中内置词典的这四项改由 AI 翻译。
+
+仓库改动和隔离副本验收均不自动更新日常安装。只有另行对目标安装执行汉化才会应用本次 profile；应用后网页翻译范围可能比旧广域注入更少。需要扩展页面或标签时，必须另外取得并验证对应结构和来源。
 
 ## 2. 启动设置界面
 
@@ -84,9 +101,9 @@ Linux 用户目录支持只用于设置/开发工具，不表示汉化安装工�
 
 重新汉化、官方更新与 `src/localization/Restore.py` 不删除用户目录。官方更新可能覆盖注入，使补译暂停；重新验证并汉化后才恢复。还原英文不是清除个人数据，清除账户/密钥需另行处理。
 
-## 5. 为什么桥接默认不启用
+## 5. 桥接匹配与版本检查
 
-仓库提供的是补丁工具，不包含官方 Electron 主入口和真实页面源码。菜单 hook 能运行，不代表可以安全信任任意窗口/preload。不能通过降低 sandbox/contextIsolation、开放通用 IPC 或网页直连来绕过这一点。
+仓库提供补丁工具和经过限定验证的 profile，不分发官方 Electron 主入口或真实页面源码。M1 目前只支持上述 Windows 样本；未知指纹、平台或架构不启用该桥接。菜单 hook 能运行，不代表可以安全信任任意窗口/preload。不能通过降低 sandbox/contextIsolation、开放通用 IPC 或网页直连来绕过这一点。
 
 只读检查工具用于**已合法取得并解包的应用副本**：
 
@@ -94,7 +111,7 @@ Linux 用户目录支持只用于设置/开发工具，不表示汉化安装工�
 python src/localization/Inspect-Translation-Compatibility.py /path/to/extracted-app --ui-file dist/example-ui.js
 ```
 
-`--ui-file` 示例路径必须替换为副本中实际存在的 UI 资源，可重复指定。工具读取 `package.json`、入口、preload 和指定 UI 文件并输出摘要；不解包真实安装、不关闭应用、不写安装文件、不联网。`matchedProfile: null` 表示没有已审核匹配项；`bridgeVerified: false` 表示指纹本身不是运行兼容证明。
+`--ui-file` 示例路径必须替换为副本中实际存在的 UI 资源，可重复指定。工具读取 `package.json`、入口、preload 和指定 UI 文件并输出摘要；不解包真实安装、不关闭应用、不写安装文件、不联网。对于 2.28.2 的外置服务，还需用 `--resources-dir` 明确提供对应 resources 目录，`--resource-file bin/language_server.exe` 可将其纳入检查摘要。应检查原始解包样本；已注入文件的指纹可能不同。`matchedProfile: null` 表示未匹配，`bridgeVerified: false` 提醒仅凭本次指纹检查不能宣称运行验收；实际证据见 M1 记录。
 
 新增 profile 前必须在授权样本/测试安装中验证：
 
@@ -102,7 +119,7 @@ python src/localization/Inspect-Translation-Compatibility.py /path/to/extracted-
 2. 可信顶层窗口、精确页面 URL、preload、sandbox/contextIsolation、导航和子 frame；页面级脚本不得获得通用 IPC 或密钥。
 3. UI 资源指纹与真实 DOM 区域；按钮/短字符串本身不是安全证明。明确排除对话、用户输入/命名、编辑器/代码、终端、工件和思考/执行日志。
 4. 配置关闭零请求、错误保留原文、旧响应不覆盖新内容、词典修改/删除不被旧请求恢复。
-5. Windows 与 macOS 的启动、重汉化、还原和用户数据保留；记录实际支持版本/架构。
+5. 所声明平台的启动、重汉化、还原和用户数据保留；分别记录实际支持版本／架构，Windows 验证不能代替 macOS 验证。
 
 不要仅凭一组哈希将 `verified` 改为 true；检查报告不是授权 profile。配置文件没有“强制启用未知版本”的开关。
 
@@ -141,4 +158,6 @@ node --test tests/js/*.test.cjs
 
 CI 工作流仅配置了验证任务，尚未因本地代码修改而在 GitHub 上运行。Linux 模拟通过不等于 Windows/macOS 真机通过；Windows/macOS CI 单元测试也不等于完整 GUI/Antigravity 安装验收。
 
-发布前必须分别建立证据：自动测试、冻结包检查、授权真实提供商请求、真实应用 bridge/DOM 隐私边界、双平台安装→重汉化→还原。缺少任一环节，就明确标记未验证，不宣传“所有版本完全兼容”。
+最新完整回归、Windows 隔离副本实测和已知限制见 [M1 阶段记录](development/M1-real-integration.md)；[历史验证记录](DRAGONGIRL-VERIFICATION.md) 保留各轮日期与计数，不能替代最新结果。
+
+发布前须按实际声明范围建立自动测试、冻结包、授权真实提供方请求、真实应用 bridge／DOM 边界和安装→重汉化→还原的证据；声明双平台时须分别完成两平台验证。M1 阶段交审不代表这些发布项目全部完成；真实 AI 页面补译、纯 `app.asar` 布局启动等未验证项应继续明确列出，不宣传“所有版本完全兼容”。

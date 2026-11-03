@@ -60,6 +60,24 @@ test('session cap and auth circuit bound requests',async()=>{let calls=0;const s
 function ipcFixture(){const handlers=new Map();const ipcMain={handle:(n,f)=>handlers.set(n,f),removeHandler:n=>handlers.delete(n)};const wc=new EventEmitter();wc.mainFrame={url:'app://ui/index.html'};wc.getURL=()=>wc.mainFrame.url;wc.isDestroyed=()=>false;wc.getLastWebPreferences=()=>({contextIsolation:true,sandbox:true,nodeIntegration:false});return {handlers,ipcMain,wc,event:{sender:wc,senderFrame:wc.mainFrame}};}
 test('IPC unregistered windows and subframes denied',async()=>{const f=ipcFixture(),service=M.createService({store:memoryStore()}),ipc=M.installIpc({ipcMain:f.ipcMain,service});const snapshot=f.handlers.get(M.CHANNELS.snapshot);assert.equal((await snapshot(f.event,{version:1})).status,'unauthorized');ipc.registerTrustedWindow(f.wc,f.wc.getURL());assert.equal((await snapshot(f.event,{version:1})).enabled,true);assert.equal((await snapshot({...f.event,senderFrame:{url:f.wc.getURL()}},{version:1})).status,'unauthorized');ipc.dispose();assert.equal(f.handlers.size,0);});
 test('navigation revokes trust even same URL',async()=>{const f=ipcFixture(),ipc=M.installIpc({ipcMain:f.ipcMain,service:M.createService({store:memoryStore()})});ipc.registerTrustedWindow(f.wc,f.wc.getURL());f.wc.emit('did-start-navigation',{},f.wc.getURL(),false,true);assert.equal((await f.handlers.get(M.CHANNELS.snapshot)(f.event,{version:1})).status,'unauthorized');ipc.dispose();});
+test('returning to the same URL publishes a new page epoch without changing dictionary or configuration', async () => {
+ const f=ipcFixture(),service=M.createService({store:memoryStore()}),ipc=M.installIpc({ipcMain:f.ipcMain,service});
+ const snapshot=()=>f.handlers.get(M.CHANNELS.snapshot)(f.event,{version:1});
+ try {
+  ipc.registerTrustedWindow(f.wc,f.wc.getURL());
+  const before=await snapshot();
+  assert.ok(Number.isSafeInteger(before.pageEpoch)&&before.pageEpoch>0);
+  assert.equal((await snapshot()).pageEpoch,before.pageEpoch);
+  f.wc.emit('did-start-navigation',{},f.wc.getURL()+'?settingsOpen=true',true,true);
+  const denied=await snapshot();
+  assert.equal(denied.status,'unauthorized');assert.equal(denied.pageEpoch,undefined);
+  ipc.registerTrustedWindow(f.wc,f.wc.getURL());
+  const after=await snapshot();
+  assert.ok(after.pageEpoch>before.pageEpoch);
+  for(const field of ['configRevision','dictionaryRevision','cacheEpoch','enabled','entries']) assert.deepEqual(after[field],before[field]);
+  assert.equal((await service.snapshot()).pageEpoch,undefined);
+ } finally { ipc.dispose(); }
+});
 test('unsafe preferences rejected; installation idempotent',()=>{const f=ipcFixture(),ipc=M.installIpc({ipcMain:f.ipcMain,service:M.createService({store:memoryStore()})});assert.equal(M.installIpc({ipcMain:f.ipcMain}),ipc);f.wc.getLastWebPreferences=()=>({contextIsolation:false,sandbox:true,nodeIntegration:false});assert.throws(()=>ipc.registerTrustedWindow(f.wc,f.wc.getURL()),{code:'unsafe_window'});ipc.dispose();});
 test('probe uses only fixed text and returns sanitized status',async()=>{let received;assert.deepEqual(await probe({store:memoryStore(),translate:async list=>{received=list;return [{id:'probe',text:'打开设置'}];}}),{ok:true,status:'connected'});assert.equal(received[0].text,'Open settings');assert.deepEqual(await probe({store:memoryStore(),translate:()=>{throw new Error('sensitive');}}),{ok:false,status:'unavailable'});});
 test('probe revision mismatch makes zero network calls',async()=>{let calls=0;const result=await probe({store:memoryStore(),expectedRevision:99,translate:()=>calls++});assert.deepEqual(result,{ok:false,status:'configuration_changed'});assert.equal(calls,0);});
@@ -72,6 +90,34 @@ test('bounded concurrency and queue',async()=>{const pending=[];let running=0,ma
  const a=service.translate(req(1)),b=service.translate(req(2));while(pending.length<2)await new Promise(r=>setImmediate(r));const c=service.translate(req(3));await new Promise(r=>setImmediate(r));const d=await service.translate(req(4));assert.equal(d.status,'queue_full');pending.shift()();await new Promise(r=>setImmediate(r));while(pending.length)pending.shift()();await Promise.all([a,b,c]);assert.ok(max<=2);service.close();
 });
 test('revoked window cannot receive an in-flight response',async()=>{const f=ipcFixture();let done;const service={snapshot:()=>new Promise(r=>done=r),translate:()=>{},close:()=>{}};const ipc=M.installIpc({ipcMain:f.ipcMain,service});ipc.registerTrustedWindow(f.wc,f.wc.getURL());const pending=f.handlers.get(M.CHANNELS.snapshot)(f.event,{version:1});f.wc.emit('did-start-navigation',{},f.wc.getURL(),false,true);done({version:1,entries:{private:'词典'}});assert.equal((await pending).status,'unauthorized');ipc.dispose();});
+
+test('same-URL re-registration cannot receive the previous navigation response', async () => {
+ const f=ipcFixture();let done;
+ const service={snapshot:()=>new Promise(resolve=>done=resolve),translate:()=>{},close:()=>{}};
+ const ipc=M.installIpc({ipcMain:f.ipcMain,service});
+ const oldRevoke=ipc.registerTrustedWindow(f.wc,f.wc.getURL());
+ const pending=f.handlers.get(M.CHANNELS.snapshot)(f.event,{version:1});
+ f.wc.emit('did-start-navigation',{},f.wc.getURL(),false,true);
+ ipc.registerTrustedWindow(f.wc,f.wc.getURL());
+ oldRevoke(); // A stale revoke handle must not delete the new registration.
+ done({version:1,entries:{private:'词典'}});
+ assert.equal((await pending).status,'unauthorized');
+ const fresh=f.handlers.get(M.CHANNELS.snapshot)(f.event,{version:1});
+ done({version:1,entries:{}});assert.deepEqual(await fresh,{version:1,entries:{},pageEpoch:2});
+ ipc.dispose();
+});
+
+test('service lifetime guard is checked before work and after asynchronous completion', async () => {
+ const f=ipcFixture();let alive=true,calls=0,done;
+ const service={snapshot:()=>{calls++;return new Promise(resolve=>done=resolve);},translate:()=>{},close:()=>{}};
+ const ipc=M.installIpc({ipcMain:f.ipcMain,service});
+ assert.throws(()=>ipc.registerTrustedWindow(f.wc,f.wc.getURL(),()=>false),{code:'unsafe_window'});
+ ipc.registerTrustedWindow(f.wc,f.wc.getURL(),()=>alive);
+ const pending=f.handlers.get(M.CHANNELS.snapshot)(f.event,{version:1});alive=false;done({version:1,entries:{}});
+ assert.equal((await pending).status,'unauthorized');
+ assert.equal((await f.handlers.get(M.CHANNELS.snapshot)(f.event,{version:1})).status,'unauthorized');
+ assert.equal(calls,1);ipc.dispose();
+});
 test('exact pretty UTF-8 write limit preserves existing original',async(t)=>{const store=await tempStore(t);const target=path.join(store.directory,'personal-dictionary.json');const original=S.defaultDictionary();await S.atomicWrite(target,original);const before=await fs.readFile(target,'utf8');const data=S.defaultDictionary();for(let i=0;i<10000;i++)data.entries[`Source ${i}`]={translation:'中'.repeat(95),source:'ai',updatedAt:'2026-10-26T00:00:00.000Z',context:'ui'};assert.ok(Buffer.byteLength(JSON.stringify(data))<4*1024*1024);assert.ok(Buffer.byteLength(JSON.stringify(data,null,2))>4*1024*1024);await assert.rejects(S.atomicWrite(target,data),{code:'storage_too_large'});assert.equal(await fs.readFile(target,'utf8'),before);assert.deepEqual((await store.read()).dictionary,original);assert.deepEqual((await fs.readdir(store.directory)).sort(),['personal-dictionary.json']);});
 test('unpaired Unicode surrogates rejected in config and dictionary',()=>{const c=S.defaultConfig();c.providers.openai.apiKey='x\ud800';assert.throws(()=>S.validateConfig(c));const d=S.defaultDictionary();d.entries.Label={translation:'中\ud800',source:'manual',updatedAt:'now',context:'ui'};assert.throws(()=>S.validateDictionary(d));});
 test('failed optional persistence keeps translation and exposes sanitized status',async()=>{const store=memoryStore();store.set(s=>s.config.autoSave=true);store.saveAI=async()=>{throw new Error('secret path');};const service=M.createService({store,providerTranslate:fakeProvider});const result=await service.translate(envelope(store.get()));assert.equal(result.translations[0].text,'打开设置');await new Promise(r=>setImmediate(r));const snapshot=await service.snapshot();assert.equal(snapshot.status,'save_failed');assert.ok(!JSON.stringify(snapshot).includes('secret'));service.close();});

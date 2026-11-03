@@ -49,3 +49,7 @@ desktop.ini
 *.bak
 *.backup
 *.tmp
+
+# Local M1 acceptance copies, profiles and screenshots (never distribute app binaries)
+/.m1-lab/
+/.m1-lab-*/

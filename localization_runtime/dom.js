@@ -35,7 +35,12 @@
     const bridge = opts.bridge || {}, getSnapshot = opts.getSnapshot || (() => ({}));
     const syncTranslate = opts.syncTranslate || (value => ({ matched: false, value }));
     const Observer = opts.MutationObserver;
-    const timers = opts.timers || { setTimeout, clearTimeout };
+    // Browser timer functions must not receive this wrapper object as `this`.
+    // Node's permissive timers hid this error in the original VM fixtures.
+    const timers = opts.timers || {
+      setTimeout: (callback, delay) => setTimeout(callback, delay),
+      clearTimeout: handle => clearTimeout(handle)
+    };
     let stopped = false, observer = null, timer = null, epoch = 0, sequence = 0, active = 0;
     let signature = '', snapshot = {}, tracked = new Set(), slots = new WeakMap();
     const queued = new Map(), inflight = new Map(), cooldown = new Map();
@@ -48,6 +53,7 @@
     function elementFor(node) { return node.nodeType === 3 ? node.parentElement : node; }
     function safeContext(node, attribute) {
       if (policy.verified !== true || stopped || !node || !node.isConnected) return null;
+      if (policy.paths && (!Array.isArray(policy.paths) || !policy.paths.includes(doc.location?.pathname) || doc.location?.search || doc.location?.hash)) return null;
       const element = elementFor(node);
       if (!element || typeof element.closest !== 'function') return null;
       if (node.getRootNode && node.getRootNode() !== doc) return null;
@@ -57,7 +63,9 @@
         for (const rule of rules) {
           if (!rule || typeof rule.selector !== 'string' || !['toolbar', 'settings', 'navigation', 'menu', 'button', 'label'].includes(rule.contextKind)) continue;
           if (attribute ? (!Array.isArray(rule.attributes) || !rule.attributes.includes(attribute)) : rule.text !== true) continue;
-          if (element.matches(rule.selector)) return rule.contextKind;
+          if (!element.matches(rule.selector)) continue;
+          if (rule.sourceTexts && (!Array.isArray(rule.sourceTexts) || !rule.sourceTexts.includes(String(read(node, attribute) || '').trim()))) continue;
+          return rule.contextKind;
         }
       } catch (_) { return null; } // Invalid or changed selector policy fails closed.
       return null;
@@ -88,6 +96,8 @@
       for (const slot of tracked) {
         if (!slot.node.isConnected) { tracked.delete(slot); continue; }
         slot.generation++;
+        // Restoration only compares a slot we previously wrote with our exact
+        // displayed value; it does not collect new candidates on a denied route.
         if (slot.displayed !== null && read(slot.node, slot.attribute) === slot.displayed) write(slot, slot.original);
         slot.displayed = null;
       }
@@ -102,7 +112,8 @@
         if (map) map.delete(slot.attribute || 'text');
       }
       for (const tasks of [queued, inflight]) for (const [key, task] of tasks) {
-        task.waiters = task.waiters.filter(waiter => tracked.has(waiter.slot) && waiter.slot.node.isConnected && waiter.generation === waiter.slot.generation && read(waiter.slot.node, waiter.slot.attribute) === waiter.original);
+        task.waiters = task.waiters.filter(waiter => tracked.has(waiter.slot) && waiter.slot.node.isConnected && waiter.generation === waiter.slot.generation &&
+          safeContext(waiter.slot.node, waiter.slot.attribute) === task.context && read(waiter.slot.node, waiter.slot.attribute) === waiter.original);
         if (!task.waiters.length) { task.controller.abort(); tasks.delete(key); }
       }
     }
@@ -123,8 +134,8 @@
       const slot = waiter.slot;
       return !stopped && task.epoch === epoch && stamp(readSnapshot()) === task.signature &&
         readSnapshot().enabled === true && slot.generation === waiter.generation &&
-        read(slot.node, slot.attribute) === waiter.original &&
-        safeContext(slot.node, slot.attribute) === task.context;
+        safeContext(slot.node, slot.attribute) === task.context &&
+        read(slot.node, slot.attribute) === waiter.original;
     }
     function schedule() {
       if (timer === null && !stopped) timer = timers.setTimeout(() => { timer = null; flush(); }, 200);
@@ -180,7 +191,8 @@
         if (currentNode.nodeType === 3) { candidate(currentNode, null); continue; }
         if (currentNode.nodeType !== 1) continue;
         try { if (currentNode.closest(EXCLUDED)) continue; } catch (_) { continue; }
-        for (const attribute of ATTRIBUTES) if (currentNode.getAttribute(attribute)) candidate(currentNode, attribute);
+        // candidate checks route, selector and attribute permission before read.
+        for (const attribute of ATTRIBUTES) candidate(currentNode, attribute);
         const children = currentNode.childNodes || [];
         const room = budget.remaining - stack.length;
         for (let i = Math.min(children.length, room) - 1; i >= 0; i--) stack.push(children[i]);
@@ -241,7 +253,7 @@
       const map = slots.get(node), slot = map && map.get(attribute || 'text');
       // Even a value changed away and back before observer delivery invalidates
       // pending work. Our own final writes do not create new requests.
-      if (slot && (slot.displayed === null || read(node, attribute) !== slot.displayed)) slot.generation++;
+      if (slot && (slot.displayed === null || !safeContext(node, attribute) || read(node, attribute) !== slot.displayed)) slot.generation++;
     }
     function start() {
       if (observer || stopped) return;

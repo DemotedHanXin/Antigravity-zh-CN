@@ -4,17 +4,21 @@ English | [简体中文](README.md)
 
 Chinese UI localization, restoration, and Windows proxy launcher / shortcut management for Antigravity Desktop. Runtime scripts use the Python standard library; no pip packages are required.
 
-This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN). Translation rules target the v2.21.1 layout; text coverage and compatibility with other versions are not guaranteed. These changes apply to **the Python source in this repository**. Previously published executables need rebuilding to include them.
+This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN). Legacy translation rules target the v2.21.1 layout; the new, limited 2.28.2 integration is described below. Text coverage and compatibility with other versions are not guaranteed. These changes apply to **the source in this repository**. Previously published executables need rebuilding to include them.
 
 ## Staged Windows manager development
 
-Development stays on `feat/DragonGirl`, progressing from M0 through M5. Each stage delivers documentation, a local commit and an annotated review tag, then stops for explicit user approval. No automatic push, merge or release is included. **M0 documentation is ready for review; M1 has not started.**
+Development stays on `feat/DragonGirl`, progressing from M0 through M5. Each stage delivers documentation, a local commit and an annotated review tag, then stops for explicit user approval. No automatic push, merge or release is included. **M0 is approved. M1 implementation and validation within its limited scope are complete, pending stage review. M2 has not started.**
 
 See the [M0 baseline and development agreement](docs/development/M0-baseline.md) and [progress tracker](docs/development/PROGRESS.md) (Chinese). The PySide6 manager, personal-dictionary precedence, seven-day candidate cache and Windows installer are planned capabilities. The sections below describe the existing scripts.
 
 ## DragonGirl development status — read first
 
-**Optional AI translation components are present, but no real-application compatibility profile has been validated or shipped.** The registry currently has an empty `profiles` list. Actual installations retain built-in dictionary localization; entering a key does not activate an unverified bridge.
+**The M1 source includes the limited `antigravity-2.28.2-win32-x64-navigation` profile for Antigravity 2.28.2 / Windows x64. It is pending stage review and has not been released.** Matching checks fingerprints of the entry point, preload, window/service modules and external `language_server.exe`, and binds the actual application window to its dynamic local service.
+
+Repatching a matching build disables the legacy broad DOM observer. Web translation then covers **only four navigation body labels on `/`, with no query string or hash: New Conversation, Automations, Customizations and Settings**. Other page text, Projects and same-text aria-labels are outside this profile. Native menus retain static localization. Unmatched builds retain the legacy synchronous localization path.
+
+All four labels currently match the built-in dictionary, so they do not naturally generate AI fallback requests. Isolated real-application tests used a deliberately missed label and a local fixed provider to validate requests, display, failures, disabled mode, navigation and service recovery. **Real-provider page translation has not been validated.** Updating repository files does not change the user's daily installation; applying the patch to a chosen installation is a separate operation.
 
 - Independent settings GUI: `python src/localization/Translation-Settings.py`; requires Tk and a desktop display.
 - Order: built-in dictionary/rules → personal dictionary → AI. AI and automatic translation persistence are off by default; native menus remain dictionary-only.
@@ -22,7 +26,7 @@ See the [M0 baseline and development agreement](docs/development/M0-baseline.md)
 - Keys are stored **in plaintext** in the user directory with an explicit save warning. Repatching/restoration do not delete settings or the personal dictionary.
 - Connection testing is an explicit, potentially billable action requiring confirmation and external Node. Success does not establish application compatibility.
 
-See the [DragonGirl guide](docs/DRAGONGIRL.md) (Chinese) for privacy boundaries, read-only compatibility inspection, packaging, and outstanding gates. **Native Windows/macOS bridge, GUI and frozen-package acceptance are still required.**
+See the [DragonGirl guide](docs/DRAGONGIRL.md) and [M1 record](docs/development/M1-real-integration.md) (Chinese) for scope, evidence, current regression results and remaining limits. macOS integration, real-provider page translation, GUI/frozen packages and full application coverage remain unvalidated.
 
 ## Existing features and repairs
 
@@ -75,7 +79,7 @@ cd Antigravity-zh-CN
 python --version
 ```
 
-Save your work first. Localization and restoration stop the target application before switching files. `--no-launch` suppresses only the subsequent automatic launch. Proxy Setup/Cleanup do not stop running applications.
+Save your work first. Localization and restoration stop the target application before switching files. Patcher reports the result without launching the application; Restore accepts `--no-launch` to suppress its subsequent automatic launch. Proxy Setup/Cleanup do not stop running applications.
 
 ## Apply and remove localization
 
@@ -152,7 +156,7 @@ New Setup versions store custom scan roots in a comment inside the existing PS1.
 - When the Windows system proxy is off, the launcher uses direct / TUN behavior and clears inherited proxy variables. Environment-only proxy configurations are outside this design.
 - The tools do not test proxy service availability, port connectivity, account status or destination reachability.
 - Shortcuts moved outside known locations require `--scan-root`. Discovery does not cover arbitrary locations, other user accounts or every Windows pin type.
-- Failure of automatic launch is reported separately from the file changes. Use `--no-launch` for file operations only.
+- Restore reports failure of its automatic launch separately from file changes; use `--no-launch` to suppress that launch. Patcher never launches the application after applying changes.
 - Translation depends on the application's file layout. Other versions and native macOS operation still require validation; complete translation of dynamic content or model output is not promised.
 
 ## Tests and code guide
@@ -170,7 +174,7 @@ See [PROJECT_STATUS.md](PROJECT_STATUS.md) for module responsibilities, file sta
 
 ![Antigravity Chinese UI example](antigravity-chinese.png)
 
-This example does not imply complete translation of every version or generated content. Add translations to the dictionary in `src/localization/Antigravity-Patcher.py`, then reapply the patch.
+This historical example does not represent M1 coverage or complete translation of every version or generated content. Dictionary entries live in `src/localization/Antigravity-Patcher.py`; matching M1 builds still restrict them to the four fixed navigation labels. Expanding that scope requires separate compatibility validation.
 
 ## Contributing and license
 

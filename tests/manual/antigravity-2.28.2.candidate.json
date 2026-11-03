@@ -1,0 +1,75 @@
+{
+  "acceptanceStatus": "pending-runtime-verification",
+  "scope": "isolated-lab-only",
+  "evidence": "user-triggered audit 18bdd7b5828c5aee98d562dffb7ba844, 2026-11-02",
+  "profile": {
+    "name": "antigravity",
+    "version": "2.28.2",
+    "main": "dist/main.js",
+    "moduleType": "commonjs",
+    "files": {
+      "package.json": "7ea0adacdc71b02eb0bb6b79b8fa3de9330f8ba70861b1fa84d6a102333ab878",
+      "dist/main.js": "66fa884c96dee5dd6a536711d35fc90fee853e9a2eede40fb4d1ab576e4ea50f",
+      "dist/preload.js": "1b702d07b8415afdb41d27d62515fa88ce91d31dbc15e9dc6cc7ae80dddb0c7b",
+      "dist/utils.js": "2f39dd7b944436bd5007297ccc15c42c897d8e6cecd5a0af93bdf6bfc1708b12",
+      "dist/languageServer.js": "5c781d05050506d7643a88b1eeadc9bb4f320d7133f84b075e6338a6ce158d26",
+      "dist/constants.js": "769ad44506db2723f25c831f63d55cf6409a71ff0c8a6b7db601da184c4f786b"
+    },
+    "resourcesFiles": {
+      "bin/language_server.exe": "a51a80eb1b355dc523dd9a6d7cec098ad450e3c9fb30d6001806cac86814f37b"
+    },
+    "schemaVersion": 1,
+    "id": "m1-lab-antigravity-2.28.2-navigation",
+    "verified": true,
+    "preload": "dist/preload.js",
+    "uiResources": [
+      "bin/language_server.exe"
+    ],
+    "windowBinding": {
+      "kind": "antigravity-local-hub-v1",
+      "paths": [
+        "/"
+      ]
+    },
+    "policy": {
+      "verified": true,
+      "paths": [
+        "/"
+      ],
+      "rules": [
+        {
+          "selector": "#root > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > a:nth-of-type(1) > span:nth-of-type(2)",
+          "contextKind": "navigation",
+          "text": true,
+          "sourceTexts": [
+            "New Conversation"
+          ]
+        },
+        {
+          "selector": "#root > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > button:nth-of-type(1) > span:nth-of-type(2)",
+          "contextKind": "navigation",
+          "text": true,
+          "sourceTexts": [
+            "Automations"
+          ]
+        },
+        {
+          "selector": "#root > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > a:nth-of-type(2) > span:nth-of-type(2)",
+          "contextKind": "navigation",
+          "text": true,
+          "sourceTexts": [
+            "Customizations"
+          ]
+        },
+        {
+          "selector": "#root > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(6) > button:nth-of-type(1) > span:nth-of-type(2)",
+          "contextKind": "navigation",
+          "text": true,
+          "sourceTexts": [
+            "Settings"
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -38,9 +38,105 @@ function fixture(extra = {}) {
   return { doc, control, text, translator, calls, respond, get snapshot() { return snapshot; }, set snapshot(v) { snapshot = v; } };
 }
 
+function trapContent(f, { text = true, attributes = true } = {}) {
+  const attempts = { text: 0, attributes: 0, writes: 0 };
+  if (text) Object.defineProperty(f.text, 'textContent', {
+    configurable: true,
+    get() { attempts.text++; throw new Error('unauthorized text read'); },
+    set() { attempts.writes++; }
+  });
+  if (attributes) for (const element of [f.doc.body, f.control]) {
+    element.getAttribute = () => { attempts.attributes++; throw new Error('unauthorized attribute read'); };
+    element.setAttribute = () => { attempts.writes++; };
+  }
+  return attempts;
+}
+
+function restrictedPolicy() {
+  return { verified: true, paths: ['/'], rules: [{ selector: '.verified-label', contextKind: 'button',
+    text: true, attributes: ['title'], sourceTexts: ['Unknown action'] }] };
+}
+
 test('safeText rejects private-looking, code, multiline, Chinese and long input', () => {
   for (const text of ['', '123', '你好', 'user@example.com', 'https://example.com', '/home/user', 'C:\\Users\\me', 'sk-secret', 'Bearer abc', 'some_variable', '<html>', 'foo\nbar', 'A'.repeat(161)]) assert.equal(safeText(text), false, text);
   assert.equal(safeText('  Unknown action  '), true);
+});
+
+test('reviewed route and exact source constraints reject unrelated page text', async () => {
+  const policy = {verified:true, paths:['/onboarding'], rules:[{selector:'button',contextKind:'button',text:true,sourceTexts:['Unknown action']}]};
+  for (const location of [{pathname:'/'},{pathname:'/onboarding',search:'?private=1'},{pathname:'/onboarding',hash:'#other'}]) {
+    const f=fixture({policy}); f.doc.location=location; f.translator.start(); await f.translator.flush(); assert.equal(f.calls.length,0);
+  }
+  const f=fixture({policy}); f.doc.location={pathname:'/onboarding'}; f.text.textContent='User supplied label';
+  f.translator.start(); await f.translator.flush(); assert.equal(f.calls.length,0);
+  f.text.textContent='Unknown action'; f.translator.scan(f.doc.body); const pending=f.translator.flush();
+  assert.equal(f.calls.length,1); f.respond(); await pending; assert.equal(f.text.textContent,'未知操作');
+  f.translator.scan(f.doc.body); await f.translator.flush(); assert.equal(f.calls.length,1);
+});
+test('text source checks never read outside selectors, permitted routes or exclusion boundaries', async () => {
+  for (const deny of [f => { f.control.classes = []; }, f => { f.doc.location.search = '?private=1'; },
+    f => { f.doc.location.hash = '#private'; }, f => { f.doc.location.pathname = '/other'; },
+    f => { f.control.classes.push('chat'); }, f => { f.doc.body.attrs['data-user-content'] = ''; }]) {
+    const f = fixture({ policy: restrictedPolicy() }); f.doc.location = { pathname: '/' }; deny(f);
+    const attempts = trapContent(f, { attributes: false });
+    f.translator.start(); await f.translator.flush();
+    assert.deepEqual(attempts, { text: 0, attributes: 0, writes: 0 }); assert.equal(f.calls.length, 0);
+  }
+});
+test('scan never pre-reads attributes without an applicable attribute rule', async () => {
+  for (const deny of [f => { f.control.classes = []; }, f => { f.doc.location.search = '?private=1'; },
+    (_f, policy) => { delete policy.rules[0].attributes; }, (_f, policy) => { policy.rules.length = 0; },
+    (_f, policy) => { policy.verified = false; }]) {
+    const policy = restrictedPolicy(), f = fixture({ policy }); f.doc.location = { pathname: '/' };
+    f.text.textContent = ''; deny(f, policy); const attempts = trapContent(f, { text: false });
+    f.translator.start(); await f.translator.flush();
+    assert.deepEqual(attempts, { text: 0, attributes: 0, writes: 0 }); assert.equal(f.calls.length, 0);
+  }
+});
+test('exact source rules translate approved text and attributes without reading other attributes', async () => {
+  const f = fixture({ policy: restrictedPolicy() }); f.doc.location = { pathname: '/' };
+  f.control.attrs.title = 'Unknown action'; f.control.attrs.placeholder = 'Private placeholder';
+  const readAttribute = f.control.getAttribute.bind(f.control), reads = [];
+  f.control.getAttribute = name => { reads.push(name); assert.equal(name, 'title'); return readAttribute(name); };
+  f.doc.body.getAttribute = () => assert.fail('body is outside the selector allowlist');
+  f.translator.start(); const pending = f.translator.flush();
+  assert.equal(f.calls[0].items.length, 1); f.respond(); await pending;
+  assert.ok(reads.length > 0); assert.equal(f.text.textContent, '未知操作');
+  assert.equal(f.control.attrs.title, '未知操作'); assert.equal(f.control.attrs.placeholder, 'Private placeholder');
+});
+test('queued and inflight text and attributes are not read after losing policy eligibility', async () => {
+  for (const phase of ['queued', 'inflight']) for (const deny of [f => { f.control.classes = []; },
+    f => { f.control.classes.push('chat'); }, f => { f.doc.location.search = '?private=1'; }]) {
+    const f = fixture({ policy: restrictedPolicy() }); f.doc.location = { pathname: '/' };
+    f.control.attrs.title = 'Unknown action'; f.translator.start();
+    const pending = phase === 'inflight' ? f.translator.flush() : null;
+    deny(f); const attempts = trapContent(f);
+    if (pending) { f.respond(); await pending; } else await f.translator.flush();
+    assert.deepEqual(attempts, { text: 0, attributes: 0, writes: 0 });
+    assert.equal(f.calls.length, phase === 'inflight' ? 1 : 0); assert.equal(f.translator.getStats().pendingWaiters, 0);
+  }
+});
+test('mutation bookkeeping does not read translated slots after they leave the policy boundary', async () => {
+  let observer;
+  class Observer { constructor(callback) { observer = this; this.callback = callback; } observe() {} disconnect() {} }
+  const f = fixture({ policy: restrictedPolicy(), MutationObserver: Observer }); f.doc.location = { pathname: '/' };
+  f.control.attrs.title = 'Unknown action'; f.translator.start(); const pending = f.translator.flush(); f.respond(); await pending;
+  f.control.classes = []; const attempts = trapContent(f);
+  observer.callback([{ type: 'characterData', target: f.text }, { type: 'attributes', target: f.control, attributeName: 'title' }]);
+  assert.deepEqual(attempts, { text: 0, attributes: 0, writes: 0 }); assert.equal(f.calls.length, 1);
+});
+test('refresh restores only previously displayed slots even after the route becomes forbidden', async () => {
+  const f = fixture({ policy: restrictedPolicy() }); f.doc.location = { pathname: '/' };
+  f.control.attrs.title = 'Unknown action'; f.translator.start(); const pending = f.translator.flush(); f.respond(); await pending;
+  f.doc.location.search = '?private=1'; f.snapshot = { ...f.snapshot, enabled: false };
+  let reads = 0, displayed = f.text.textContent;
+  Object.defineProperty(f.text, 'textContent', { get() { reads++; return displayed; }, set(value) { displayed = value; } });
+  const readAttribute = f.control.getAttribute.bind(f.control);
+  f.control.getAttribute = name => { reads++; assert.equal(name, 'title'); return readAttribute(name); };
+  f.doc.body.getAttribute = () => assert.fail('restoration must not scan unrelated attributes');
+  f.translator.refresh();
+  assert.equal(reads, 2); assert.equal(displayed, 'Unknown action'); assert.equal(f.control.attrs.title, 'Unknown action');
+  assert.equal(f.calls.length, 1);
 });
 test('empty or unverified policy sends nothing', async () => {
   for (const policy of [{}, { verified: false, rules: [{ selector: 'button', text: true }] }, { verified: true, rules: [] }]) {
