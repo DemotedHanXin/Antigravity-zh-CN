@@ -2,7 +2,7 @@
 
 更新日期：2026-11-03（Asia/Shanghai）。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次改动。日常使用命令见 [README.md](README.md)，英文说明见 [README_EN.md](README_EN.md)。
 
-Windows 管理器开发已建立 [M0 基线与开发约定](docs/development/M0-baseline.md) 和 [阶段进度](docs/development/PROGRESS.md)：固定在 `feat/DragonGirl` 开发，每阶段记录、提交、打附注标签并等待用户审核。M0 已获批准；M1 限定范围的实现和实测已完成，待阶段审核；M2 尚未开始。最新回归结果、证据和交审状态统一记录在 [M1 阶段文档](docs/development/M1-real-integration.md)，下文历史计数保留各自日期语境。
+Windows 管理器开发已建立 [M0 基线与开发约定](docs/development/M0-baseline.md) 和 [阶段进度](docs/development/PROGRESS.md)：固定在 `feat/DragonGirl` 开发，每阶段记录、提交、打附注标签并等待用户审核。M0、M1 已获批准，M2 已完成、待审核，M3 未开始。接入实测见 [M1 记录](docs/development/M1-real-integration.md)，当前回归和交审状态见 [M2 记录](docs/development/M2-dictionary-review.md)；历史计数保留各自日期语境。
 
 ## 0. DragonGirl 开发版增量与验证边界
 
@@ -16,7 +16,9 @@ Windows 管理器开发已建立 [M0 基线与开发约定](docs/development/M0-
 
 Windows 隔离副本已实测受控未命中的成功／失败／关闭、导航返回、设置页边界、设置工具关闭时运行、归档恢复与解包重建，以及同一应用和窗口内的服务恢复。受控提供方返回本地固定译文，没有调用真实外部 AI。源码更新不会自行改动日常安装；应用新 profile 需要另行对明确目标执行汉化。阶段交审不代表发布或用户已批准。
 
-- 默认关闭 AI 与自动保存；原生菜单不接 AI。密钥只保存在用户目录，由主进程使用，不返回网页；明文风险在 GUI 中提示。
+- 默认关闭 AI；新结果先进入七天候选，采纳才写入个人词典，拒绝持续抑制直到解除。原生菜单不接 AI。密钥仍按明文存储，DPAPI 属于 M3。
+- 当前优先级为个人词典 → 内置词典／规则 → 有效候选 → AI；内置四组数据已抽离到 JSON，保留 M1 旧定义的有效值与顺序。
+- schema2 迁移保留手工及历史 AI 词条，后者标为 legacy-ai 而不自动过期；多文件审核通过共享锁和恢复 journal 提交。本轮没有迁移日常数据或更新日常安装。
 - 用户目录独立于安装和还原范围；JSON 版本、跨进程锁、原子替换、删除记录防止覆盖/复活旧词条。
 - macOS 桥接、四标签之外的 UI 范围、GUI 外观／冻结包和真实提供方页面补译尚未验收。纯 `app.asar` 布局启动未验证；已通过的恢复路径为归档切换、完整性检查、解包重建后启动和登录保留。
 - 现有测试的 Windows fixture 已显式模拟平台，保留生产的 Windows/macOS 安装限制；Linux 开发测试不扩展生产平台支持。
@@ -58,6 +60,9 @@ Python 源码集中在 `src/` 的两个目录：`localization/` 保存原作者�
 | [src/localization/Restore.py](src/localization/Restore.py) | `restore()` 验证原版归档、切换应用状态、清除汉化目录；`main()` 处理 CLI 和失败状态 |
 | [src/localization/antigravity_common.py](src/localization/antigravity_common.py) | 安装目录发现、ASAR 校验/提取、入口验证、受限范围删除，以及目标安装的进程控制 |
 | [src/localization/Translation-Settings.py](src/localization/Translation-Settings.py) | 独立 Tkinter 设置 GUI、个人词典编辑与显式连接测试 |
+| [src/localization/translation_service.py](src/localization/translation_service.py) | 不含凭据的结构化词典／审核接口，供 CLI 与后续管理器共用 |
+| [src/localization/Translation-Dictionary.py](src/localization/Translation-Dictionary.py) | 词典列表、个人覆盖、恢复默认、候选采纳／拒绝／解除和清理 CLI |
+| [src/localization/builtin_dictionary.py](src/localization/builtin_dictionary.py) | 读取并验证随包内置数据，保持源码和冻结资源定位 |
 | [src/localization/translation_config.py](src/localization/translation_config.py) | 用户数据路径、配置/词典校验、跨进程锁与原子保存 |
 | [src/localization/translation_integration.py](src/localization/translation_integration.py) | 运行时资源定位、应用指纹/profile 检查与桥接注入 |
 | [src/localization/Inspect-Translation-Compatibility.py](src/localization/Inspect-Translation-Compatibility.py) | 只读检查已解包应用副本并报告兼容 profile |
@@ -194,6 +199,6 @@ python -B -m unittest discover -s tests -v
 
 ## 7. 后续维护建议
 
-新增翻译优先修改 Patcher 中的字典与注入代码；匹配 M1 profile 时仍受四个固定导航标签的白名单限制，扩展 UI 范围须补充对应验证。新增归档处理逻辑放在公共模块；Windows 启动器与 COM 桥接集中在 Setup。修改涉及安装文件切换时，应先添加失败路径回归测试，再考虑正常流程。
+内置数据在 `localization_runtime/builtin-dictionary.json`，正则逻辑和注入保留在代码；个人修改不编辑内置数据。匹配 profile 时仍受四个固定导航标签限制，扩展 UI 范围须补充验证。新增归档处理逻辑放在公共模块；Windows 启动器与 COM 桥接集中在 Setup。修改涉及安装文件切换时，应先添加失败路径回归测试，再考虑正常流程。
 
 发布前应在目标版本的干净安装上验证：英文启动、汉化启动、核心依赖功能、还原启动、代理配置、代理清理、无效输入保护。不要仅凭单元测试通过宣称所有版本完全兼容。

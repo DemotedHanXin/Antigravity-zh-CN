@@ -38,21 +38,53 @@ test('symlink storage rejected',async(t)=>{
  }
  await assert.rejects(store.read());
 });
-test('AI persistence guarded by opt-in revision manual and tombstone',async(t)=>{
- const store=await tempStore(t),config=enabledConfig(),dictionary=S.defaultDictionary();config.autoSave=true;dictionary.entries.Save={translation:'保存',source:'manual',updatedAt:'now',context:'ui'};dictionary.tombstones.Delete=0;
- await writeState(store,config,dictionary);assert.equal(await store.saveAI([{source:'New label',translation:'新标签'}],9,1),false);
- assert.equal(await store.saveAI([{source:'Save',translation:'储存'},{source:'Delete',translation:'删除'},{source:'New label',translation:'新标签'}],0,1),true);
- const data=(await store.read()).dictionary;assert.equal(data.entries.Save.translation,'保存');assert.equal(data.entries.Delete,undefined);assert.equal(data.entries['New label'].translation,'新标签');assert.equal(data.revision,1);
+test('new AI results enter candidates without changing personal entries or extending expiry',async(t)=>{
+ const store=await tempStore(t),config=enabledConfig(),dictionary=S.defaultDictionary();dictionary.entries.Save={translation:'保存',source:'manual',updatedAt:'now',context:'ui'};dictionary.tombstones.Delete=0;
+ await writeState(store,config,dictionary);const guard={configRevision:1,dictionaryRevision:0,epochs:{Save:0,Delete:0,'New label':0}},now=1000;
+ assert.equal((await store.saveCandidates([{source:'New label',translation:'新标签'}],{...guard,dictionaryRevision:9},now)).saved.length,0);
+ const saved=await store.saveCandidates([{source:'Save',translation:'储存'},{source:'Delete',translation:'删除'},{source:'New label',translation:'新标签'}],guard,now);
+ assert.deepEqual(saved.saved.map(row=>row.source),['Delete','New label']);
+ await store.saveCandidates([{source:'New label',translation:'改变译文'}],guard,now+1000);
+ const data=await store.read(now+1000);assert.equal(data.dictionary.entries.Save.translation,'保存');assert.equal(data.dictionary.entries.Delete,undefined);assert.equal(data.dictionary.entries['New label'],undefined);assert.equal(data.dictionary.revision,0);
+ assert.equal(data.candidates.entries['New label'].translation,'新标签');assert.equal(data.candidates.entries['New label'].expiresAt,now+604800000);
 });
 test('lock timeout does not steal existing lock',async(t)=>{const store=await tempStore(t);await fs.mkdir(path.join(store.directory,'.translation.lock'));await assert.rejects(store.withLock(()=>{}, {timeoutMs:30}),{code:'storage_locked'});assert.ok((await fs.stat(path.join(store.directory,'.translation.lock'))).isDirectory());});
-test('dictionary reserved keys, conflicts and future schema rejected',()=>{for(const data of [JSON.parse('{"schemaVersion":1,"revision":0,"entries":{"__proto__":{"translation":"测试","source":"manual","context":"ui","updatedAt":"now"}},"tombstones":{}}'),{...S.defaultDictionary(),schemaVersion:2}])assert.throws(()=>S.validateDictionary(data));});
-function memoryStore(){let state={config:enabledConfig(),dictionary:S.defaultDictionary()};return {read:async()=>structuredClone(state),saveAI:async()=>false,set:update=>{update(state);},get:()=>state};}
-function envelope(state,override={}){return {version:1,configRevision:state.config.revision,dictionaryRevision:state.dictionary.revision,cacheEpoch:state.config.cacheEpoch,items,...override};}
+test('dictionary reserved keys, conflicts and future schema rejected',()=>{for(const data of [JSON.parse('{"schemaVersion":2,"revision":0,"entries":{"__proto__":{"translation":"测试","source":"manual","context":"ui","updatedAt":"now"}},"tombstones":{}}'),{...S.defaultDictionary(),schemaVersion:3}])assert.throws(()=>S.validateDictionary(data));});
+function memoryStore(){let state={config:enabledConfig(),dictionary:S.defaultDictionary(),candidates:S.defaultCandidates()};return {
+ read:async(now=Date.now())=>{if(typeof now==='function')now=now();for(const [source,item] of Object.entries(state.candidates.entries))if(now>=item.expiresAt){delete state.candidates.entries[source];state.candidates.epochs[source]=(state.candidates.epochs[source]||0)+1;state.candidates.revision++;}return structuredClone(state);},
+ saveCandidates:async(items,guard,now=Date.now())=>{if(typeof now==='function')now=now();const saved=[];if(!state.config.enabled)return {saved,candidatesRevision:state.candidates.revision,status:'disabled'};
+ if(guard.configRevision!==state.config.revision||guard.dictionaryRevision!==state.dictionary.revision)return {saved,candidatesRevision:state.candidates.revision,status:'stale'};
+ for(const {source,translation} of items){if(guard.epochs[source]!== (state.candidates.epochs[source]||0)||Object.hasOwn(state.candidates.rejected,source)||Object.hasOwn(state.dictionary.entries,source))continue;
+ if(!Object.hasOwn(state.candidates.entries,source)){state.candidates.entries[source]={translation,createdAt:now,expiresAt:now+604800000,context:'ui'};state.candidates.revision++;}saved.push({source,...state.candidates.entries[source]});}
+ return {saved,candidatesRevision:state.candidates.revision,status:'ok'};},set:update=>{update(state);},get:()=>state};}
+function envelope(state,override={}){return {version:1,configRevision:state.config.revision,dictionaryRevision:state.dictionary.revision,candidatesRevision:state.candidates.revision,cacheEpoch:state.config.cacheEpoch,items,...override};}
 function fakeProvider(list){return Promise.resolve(list.map(i=>({id:i.id,text:'打开设置'})));}
 test('disabled service never invokes provider and still sends personal dictionary',async()=>{const store=memoryStore();store.set(s=>{s.config.enabled=false;s.dictionary.entries.Save={translation:'保存'};});let calls=0;const service=M.createService({store,providerTranslate:()=>calls++});assert.equal((await service.translate(envelope(store.get()))).status,'disabled');assert.equal((await service.snapshot()).entries.Save,'保存');assert.equal(calls,0);service.close();});
 test('snapshot excludes credentials and profiles',async()=>{const service=M.createService({store:memoryStore()});const snap=await service.snapshot();assert.ok(!JSON.stringify(snap).includes('fake-test-key'));assert.equal(snap.providers,undefined);service.close();});
 test('safe candidates and envelope limits',()=>{for(const text of ['hello\nworld','https://example.com','/home/user/file','abc@example.com','sk_secretvalue','1234','中文','C:\\code','a'.repeat(161)])assert.equal(M.safeSource(text),false);assert.throws(()=>M.validateEnvelope({...envelope(memoryStore().get()),url:'https://evil.example'}));});
-test('deduplicates and caches by text/context',async()=>{let calls=0;const store=memoryStore(),service=M.createService({store,providerTranslate:async list=>{calls++;await new Promise(r=>setTimeout(r,5));return fakeProvider(list);}});const req=envelope(store.get());const [a,b]=await Promise.all([service.translate(req),service.translate({...req,items:[{...items[0],id:'different'}]})]);assert.equal(calls,1);assert.equal(a.translations[0].id,'one');assert.equal(b.translations[0].id,'different');await service.translate(req);assert.equal(calls,1);service.close();});
+test('deduplicates provider requests and reuses committed candidates',async()=>{let calls=0;const store=memoryStore(),service=M.createService({store,providerTranslate:async list=>{calls++;await new Promise(r=>setTimeout(r,5));return fakeProvider(list);}});const req=envelope(store.get());const [a,b]=await Promise.all([service.translate(req),service.translate({...req,items:[{...items[0],id:'different'}]})]);assert.equal(calls,1);assert.equal(a.status,'candidates_updated');assert.equal(b.status,'candidates_updated');assert.deepEqual(a.translations,[]);assert.deepEqual(b.translations,[]);const reused=await service.translate(envelope(store.get()));assert.equal(reused.translations[0].source,'candidate');assert.equal(reused.translations[0].text,'打开设置');assert.equal(calls,1);service.close();});
+test('same source in different contexts persists once and reuses stable expiry for every ID',async(t)=>{
+ let now=1000;const store=await tempStore(t);await writeState(store,enabledConfig());const received=[];
+ const service=M.createService({store,clock:()=>now,providerTranslate:async list=>{received.push(list);return fakeProvider(list);}});t.after(()=>service.close());
+ const repeated=[{id:'button',text:'Open settings',safeContextKind:'button'},{id:'toolbar',text:'Open settings',safeContextKind:'toolbar'}];
+ const initial=await store.read(now),result=await service.translate(envelope(initial,{items:repeated}));
+ assert.equal(result.status,'candidates_updated');assert.deepEqual(result.translations,[]);assert.equal(received.length,1);
+ assert.equal(received[0].length,1);assert.equal(received[0][0].safeContextKind,'button');
+ const saved=await store.read(now);assert.deepEqual(Object.keys(saved.candidates.entries),['Open settings']);
+ const expiresAt=saved.candidates.entries['Open settings'].expiresAt;now=2000;
+ const reused=await service.translate(envelope(saved,{items:repeated}));
+ assert.deepEqual(reused.translations.map(row=>row.id),['button','toolbar']);assert.ok(reused.translations.every(row=>row.expiresAt===expiresAt));
+ assert.equal((await service.snapshot()).candidates['Open settings'].createdAt,1000);assert.equal(received.length,1);
+});
+test('concurrent requests share generation for the same source across contexts',async(t)=>{
+ const store=memoryStore();const releases=[];let calls=0;
+ const service=M.createService({store,providerTranslate:list=>{calls++;return new Promise(resolve=>{releases.push(()=>resolve(list.map(row=>({id:row.id,text:'打开设置'}))));});}});t.after(()=>service.close());
+ const first=service.translate(envelope(store.get(),{items:[{id:'button',text:'Open settings',safeContextKind:'button'}]}));
+ const second=service.translate(envelope(store.get(),{items:[{id:'toolbar',text:'Open settings',safeContextKind:'toolbar'}]}));
+ while(!releases.length)await new Promise(resolve=>setImmediate(resolve));releases.forEach(release=>release());
+ const results=await Promise.all([first,second]);assert.equal(calls,1);assert.ok(results.every(result=>result.status==='candidates_updated'&&result.translations.length===0));
+ assert.deepEqual(Object.keys(store.get().candidates.entries),['Open settings']);assert.equal(calls,1);
+});
 test('rejects stale request before network',async()=>{let calls=0;const store=memoryStore(),service=M.createService({store,providerTranslate:()=>calls++});assert.equal((await service.translate(envelope(store.get(),{configRevision:0}))).status,'stale');assert.equal(calls,0);service.close();});
 test('in-flight config change discards result',async()=>{let resolve;const store=memoryStore(),service=M.createService({store,providerTranslate:list=>new Promise(r=>{resolve=()=>r(list.map(i=>({id:i.id,text:'打开设置'})));})});const task=service.translate(envelope(store.get()));while(!resolve)await new Promise(r=>setImmediate(r));store.set(s=>{s.config.enabled=false;s.config.revision++;});resolve();assert.equal((await task).translations.length,0);service.close();});
 test('in-flight dictionary delete discards result',async()=>{let resolve;const store=memoryStore(),service=M.createService({store,providerTranslate:list=>new Promise(r=>{resolve=()=>r(list.map(i=>({id:i.id,text:'打开设置'})));})});const task=service.translate(envelope(store.get()));while(!resolve)await new Promise(r=>setImmediate(r));store.set(s=>{s.dictionary.revision++;s.dictionary.tombstones['Open settings']=1;});resolve();assert.equal((await task).translations.length,0);service.close();});
@@ -120,4 +152,66 @@ test('service lifetime guard is checked before work and after asynchronous compl
 });
 test('exact pretty UTF-8 write limit preserves existing original',async(t)=>{const store=await tempStore(t);const target=path.join(store.directory,'personal-dictionary.json');const original=S.defaultDictionary();await S.atomicWrite(target,original);const before=await fs.readFile(target,'utf8');const data=S.defaultDictionary();for(let i=0;i<10000;i++)data.entries[`Source ${i}`]={translation:'中'.repeat(95),source:'ai',updatedAt:'2026-10-26T00:00:00.000Z',context:'ui'};assert.ok(Buffer.byteLength(JSON.stringify(data))<4*1024*1024);assert.ok(Buffer.byteLength(JSON.stringify(data,null,2))>4*1024*1024);await assert.rejects(S.atomicWrite(target,data),{code:'storage_too_large'});assert.equal(await fs.readFile(target,'utf8'),before);assert.deepEqual((await store.read()).dictionary,original);assert.deepEqual((await fs.readdir(store.directory)).sort(),['personal-dictionary.json']);});
 test('unpaired Unicode surrogates rejected in config and dictionary',()=>{const c=S.defaultConfig();c.providers.openai.apiKey='x\ud800';assert.throws(()=>S.validateConfig(c));const d=S.defaultDictionary();d.entries.Label={translation:'中\ud800',source:'manual',updatedAt:'now',context:'ui'};assert.throws(()=>S.validateDictionary(d));});
-test('failed optional persistence keeps translation and exposes sanitized status',async()=>{const store=memoryStore();store.set(s=>s.config.autoSave=true);store.saveAI=async()=>{throw new Error('secret path');};const service=M.createService({store,providerTranslate:fakeProvider});const result=await service.translate(envelope(store.get()));assert.equal(result.translations[0].text,'打开设置');await new Promise(r=>setImmediate(r));const snapshot=await service.snapshot();assert.equal(snapshot.status,'save_failed');assert.ok(!JSON.stringify(snapshot).includes('secret'));service.close();});
+test('failed candidate persistence never exposes transient translation and sanitizes status',async()=>{const store=memoryStore();store.saveCandidates=async()=>{throw new Error('secret path');};const service=M.createService({store,providerTranslate:fakeProvider});const result=await service.translate(envelope(store.get()));assert.equal(result.translations.length,0);assert.equal(result.status,'save_failed');const snapshot=await service.snapshot();assert.equal(snapshot.status,'save_failed');assert.ok(!JSON.stringify(snapshot).includes('secret'));service.close();});
+
+test('candidate snapshots remain reusable with AI disabled and disclose no configuration secrets',async()=>{
+ let now=1000,calls=0;const store=memoryStore(),service=M.createService({store,clock:()=>now,providerTranslate:list=>{calls++;return fakeProvider(list);}});
+ await service.translate(envelope(store.get()));const first=await service.snapshot();assert.equal(first.candidates['Open settings'].source,'ai');
+ assert.equal(first.candidates['Open settings'].createdAt,1000);assert.equal(first.candidates['Open settings'].expiresAt,604801000);
+ now+=1000;store.set(s=>{s.config.enabled=false;s.config.revision++;});
+ const snap=await service.snapshot(),result=await service.translate(envelope(store.get()));
+ assert.equal(snap.enabled,false);assert.deepEqual(snap.candidates,first.candidates);assert.equal(result.translations[0].expiresAt,604801000);assert.equal(calls,1);
+ assert.ok(!JSON.stringify(snap).includes('fake-test-key'));assert.equal(snap.providers,undefined);service.close();
+});
+test('candidate expiry uses first generation time and permits a fresh request after cleanup',async()=>{
+ let now=1000,calls=0;const store=memoryStore(),service=M.createService({store,clock:()=>now,providerTranslate:list=>{calls++;return fakeProvider(list);}});
+ await service.translate(envelope(store.get()));now=604800999;await service.translate(envelope(store.get()));assert.equal(calls,1);
+ const old=envelope(store.get());now=604801000;assert.equal((await service.translate(old)).status,'stale');
+ const expired=await service.snapshot();assert.deepEqual({...expired.candidates},{});
+ assert.equal((await service.translate(envelope(store.get()))).status,'candidates_updated');assert.equal(calls,2);
+ assert.equal(store.get().candidates.entries['Open settings'].createdAt,now);service.close();
+});
+test('reject suppresses AI until explicit unblock; deletion tombstones alone do not suppress it',async()=>{
+ let calls=0;const store=memoryStore();store.set(s=>{s.candidates.rejected['Open settings']={rejectedAt:1000};s.candidates.epochs['Open settings']=1;s.candidates.revision++;s.dictionary.tombstones['Open settings']=0;});
+ const service=M.createService({store,providerTranslate:list=>{calls++;return fakeProvider(list);}});
+ assert.equal((await service.snapshot()).rejected['Open settings'],true);await service.translate(envelope(store.get()));assert.equal(calls,0);
+ store.set(s=>{delete s.candidates.rejected['Open settings'];s.candidates.epochs['Open settings']++;s.candidates.revision++;});
+ assert.equal((await service.translate(envelope(store.get()))).status,'candidates_updated');assert.equal(calls,1);service.close();
+});
+test('candidate rejection, expiry and manual changes invalidate inflight results before persistence',async()=>{
+ for(const change of [s=>{s.candidates.rejected['Open settings']={rejectedAt:1000};},s=>{},s=>{s.dictionary.entries['Open settings']={translation:'手工设置'};s.dictionary.revision++;}]){
+  let resolve,saves=0;const store=memoryStore(),save=store.saveCandidates;store.saveCandidates=(...args)=>{saves++;return save(...args);};
+  const service=M.createService({store,providerTranslate:list=>new Promise(done=>{resolve=()=>done(list.map(i=>({id:i.id,text:'打开设置'})));})});
+  const pending=service.translate(envelope(store.get()));while(!resolve)await new Promise(r=>setImmediate(r));
+  store.set(s=>{change(s);s.candidates.epochs['Open settings']=(s.candidates.epochs['Open settings']||0)+1;s.candidates.revision++;});
+  resolve();assert.equal((await pending).translations.length,0);assert.equal(saves,0);assert.equal(store.get().candidates.entries['Open settings'],undefined);service.close();
+ }
+});
+test('independent concurrent candidate additions both persist without invalidating each other',async()=>{
+ const store=memoryStore(),resolvers=[];const service=M.createService({store,providerTranslate:list=>new Promise(resolve=>resolvers.push(()=>resolve(list.map(i=>({id:i.id,text:'打开设置'})))))});
+ const one=service.translate(envelope(store.get())),two=service.translate(envelope(store.get(),{items:[{id:'two',text:'Open preferences',safeContextKind:'settings'}]}));
+ while(resolvers.length<2)await new Promise(r=>setImmediate(r));resolvers[0]();assert.equal((await one).status,'candidates_updated');resolvers[1]();assert.equal((await two).status,'candidates_updated');
+ assert.deepEqual(Object.keys(store.get().candidates.entries).sort(),['Open preferences','Open settings']);service.close();
+});
+test('old or missing candidate revisions fail closed before provider work',async()=>{
+ let calls=0;const store=memoryStore(),service=M.createService({store,providerTranslate:()=>calls++});
+ const missing=envelope(store.get());delete missing.candidatesRevision;assert.equal((await service.translate(missing)).status,'invalid_request');
+ store.set(s=>s.candidates.revision++);assert.equal((await service.translate(envelope(store.get(),{candidatesRevision:0}))).status,'stale');assert.equal(calls,0);service.close();
+ const unavailable=M.createService({store:{read:async()=>({config:enabledConfig(),dictionary:S.defaultDictionary()})},providerTranslate:()=>calls++});
+ assert.equal((await unavailable.snapshot()).status,'storage_unavailable');assert.equal(calls,0);unavailable.close();
+});
+test('component startup and periodic cleanup expire candidates without renderer polling',async()=>{
+ let now=604801000,calls=0;const store=memoryStore(),intervals=new Map();store.set(s=>{s.candidates.entries.Label={translation:'标签',createdAt:1000,expiresAt:604801000,context:'ui'};});
+ const timers={setInterval(callback,delay){intervals.set(delay,callback);return delay;},clearInterval(handle){intervals.delete(handle);}};
+ const service=M.createService({store,clock:()=>now,timers,providerTranslate:()=>calls++});await new Promise(r=>setImmediate(r));
+ assert.equal(store.get().candidates.entries.Label,undefined);assert.ok(intervals.has(60000));
+ store.set(s=>{s.candidates.entries.Other={translation:'其它',createdAt:now,expiresAt:now+604800000,context:'ui'};});now+=604800000;
+ await intervals.get(60000)();assert.equal(store.get().candidates.entries.Other,undefined);assert.equal(calls,0);service.close();assert.equal(intervals.size,0);
+});
+test('clock rollback hides future candidates without repeating provider calls',async()=>{
+ const store=memoryStore();store.set(s=>{s.candidates.entries['Open settings']={translation:'打开设置',createdAt:2000,expiresAt:604802000,context:'ui'};});
+ let calls=0;const service=M.createService({store,clock:()=>1000,providerTranslate:()=>calls++});
+ assert.deepEqual({...((await service.snapshot()).candidates)},{});
+ for(let i=0;i<3;i++)assert.equal((await service.translate(envelope(store.get()))).translations.length,0);
+ assert.equal(calls,0);assert.equal(store.get().candidates.entries['Open settings'].createdAt,2000);service.close();
+});

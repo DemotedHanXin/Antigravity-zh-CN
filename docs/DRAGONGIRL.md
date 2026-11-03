@@ -1,10 +1,10 @@
 # DragonGirl：AI 补译开发版使用与验证说明
 
-> **M1 已完成 Antigravity 2.28.2 / Windows x64 的限定范围实现和实测，待阶段审核，未发布。** 源码注册表中的 profile 为 `antigravity-2.28.2-win32-x64-navigation`，只覆盖下述四个导航正文标签。M0 已获批准，M2 尚未开始；最新回归结果和交审状态见 [M1 阶段记录](development/M1-real-integration.md) 与 [开发进度](development/PROGRESS.md)。更新源码不会自行改动日常安装。
+> **M0、M1 已获批准，M2 词典与审核流程已完成、待审核，未发布。** 2.28.2 / Windows x64 的 profile 仍为 `antigravity-2.28.2-win32-x64-navigation`，只覆盖下述四个导航正文标签。接入实测见 [M1 记录](development/M1-real-integration.md)，当前数据协议与回归见 [M2 记录](development/M2-dictionary-review.md) 和 [开发进度](development/PROGRESS.md)。更新源码不会自行改动日常安装。
 
 ## 1. 已提供的组件与明确边界
 
-- 独立 Tkinter GUI，管理四类提供商、AI 开关、自动保存开关、个人词典和缓存失效标记。
+- 独立 Tkinter GUI，管理四类提供商、AI 开关、个人词典和缓存失效标记；待确认审核提供结构化 CLI，统一 PySide6 界面留给 M3。
 - Python / Node 共用的用户目录、版本化 JSON、跨进程锁与原子替换；词条手工编辑优先、删除记录防止旧结果恢复词条。
 - 主进程翻译服务、受限 IPC、去重/缓存/队列/限流与四种提供商适配器。
 - 默认空白名单的 DOM 补译模块，异步回写前检查原文、节点、导航和配置/词典版本。
@@ -12,7 +12,7 @@
 
 M1 在 Windows 隔离副本实测了窗口／preload 接入、动态服务绑定、受控未命中的成功／失败／关闭、导航恢复、设置页停留边界、设置工具关闭时运行、归档恢复与解包重建，以及同一应用／窗口内的服务恢复。**真实提供方页面补译、macOS 桥接、完整 UI 覆盖、原生 GUI 外观和冻结包运行仍未验收。** 固定文案连接测试通过也不能替代页面补译验收。
 
-当前翻译顺序为内置词典/规则 → 个人词典 → AI；个人词典不覆盖内置命中。AI 失败、关闭或响应不合法时保留原文。原生菜单仍使用现有内置词典，不接个人词典和 AI。个人词典优先、7 天待确认译文及采纳／拒绝流程属于尚未开始的 M2；现有“自动保存”开关不是该审核流程。
+当前翻译顺序为 **个人词典 → 内置词典／规则 → 有效待确认译文 → AI**。删除个人覆盖恢复内置译文；无内置命中时继续正常候选／AI 流程。有效候选在 AI 关闭时仍可复用，拒绝记录仅抑制自动补译，不覆盖个人或内置译文。原生菜单仍使用静态词典，不接个人覆盖或 AI。
 
 ### M1 实际覆盖范围
 
@@ -45,7 +45,7 @@ python3 src/localization/Translation-Settings.py
 
 需要带 Tk 的 Python 和可用桌面显示环境。导入模块不会弹出 GUI、修改安装或发起网络请求。缺少 Tk/显示环境会说明不可用，而不是绕过检查。单纯编辑配置不要求 Node；可选连接测试需要 `node` 在 PATH 中，并随源码/冻结包附带 `localization_runtime/probe.cjs`。
 
-首次默认 `enabled=false`、`autoSave=false`；地址有官方默认值，模型和密钥留空。自行填写提供商、模型、密钥，并明确保存。**保存配置不自动勾选启用 AI；勾选启用也不能绕过兼容 profile 检查。** 模型名称和账户额度由所选服务决定，不自动查询或承诺免费额度。
+首次默认 `enabled=false`；`autoSave=false` 仅为弃用的兼容字段，不能再开启，新 AI 结果全部进入待确认流程。地址有默认值，模型和密钥留空。自行填写提供商、模型、密钥，并明确保存。**保存配置不自动勾选启用 AI；勾选启用也不能绕过兼容 profile 检查。** 模型名称和账户额度由所选服务决定，不自动查询或承诺免费额度。
 
 连接测试必须主动点击并确认可能产生费用，使用已保存配置和固定测试文案，不采集正在编辑的页面内容。缺少 Node/测试资源会报告不可用；测试只返回脱敏状态。没有自动测试连接、自动切换提供商或后台模型枚举。命令行主动测试方式：
 
@@ -91,13 +91,28 @@ Linux 用户目录支持只用于设置/开发工具，不表示汉化安装工�
 
 - `config.json`：schema/revision、开关、四类提供商地址/模型/**明文密钥**、请求限制和缓存版本。
 - `personal-dictionary.json`：schema/revision、原文→译文、来源/更新时间和删除记录。
+- `pending-translations/state.json`：独立候选 entries、永久拒绝记录 rejected 以及使旧响应失效的 epochs；候选从首次生成起 7 天，复用不续期。
+- `.translation-journal.json`：跨文件迁移／采纳操作的恢复事务，不是导出文件，也不应手工删除或共享。
 - `.translation.lock/`：跨进程写入锁。锁争用有超时，不强删其他进程的锁；异常遗留时先确认所有相关进程已退出，再调查锁状态，不在写入进行中手工删除。
 
 明文不是加密：同一账户下其他程序、共享账户、云盘同步、备份和文件泄露都可能暴露密钥并造成费用。GUI 遮蔽输入和脱敏日志不能消除磁盘风险；保存密钥前有显式确认。不要把此目录加入仓库、截图公开或发给他人。工具不自动读取浏览器/系统凭据。
 
 同目录临时写入、文件同步和原子替换减少半文件风险；版本冲突会拒绝覆盖，需要重新加载。损坏 JSON/未知 schema 不自动重建覆盖。文件权限、磁盘满或保存失败会报告错误。个人词典手工条目不被 AI 自动覆盖；删除记录用于阻止在途请求把词条重新保存。
 
-“自动保存 AI 译文”关闭时，仅使用会话缓存；开启时才将通过校验的结果保存到个人词典。可在词典页查看、检索、编辑、删除。已有个人词典可以在 AI 关闭时使用，但仍需可信应用桥接和安全 DOM 区域。
+新 AI 译文先持久化为候选，再通过新快照显示；保存失败不会冒充已保存或直接写个人词典。到期后移除候选并恢复默认／英文，再次遇到允许文案可重新请求。采纳时再次检查版本和期限；编辑后采纳允许修正译文。拒绝不因七天清理而消失，只有显式解除才恢复自动请求许可。解除和清理本身不调用 AI。
+
+M2 首次读取旧数据时执行 schema1→schema2 迁移，手工条目保留；旧自动保存 AI 标为 `legacy-ai`（历史保存、未审核），留在正式词典中不受七天清理影响。旧运行时遇到 schema2 停止增强翻译，不能继续写入旧格式；应同时更新安装组件。迁移与审核共用锁及完整 after-image journal：journal 持久化后是提交点，中断后的下一次持锁读取继续完成事务；这不是恢复旧值的回滚。真实进程异常退出可能遗留锁，须核实后处理，不能直接删除。源码回退不提供数据降级。
+
+### 词典与审核命令行
+
+`Translation-Dictionary.py` 输出结构化 JSON，不输出提供商配置或密钥。写入时使用刚读取的版本号；版本冲突先重新加载，不猜测覆盖。默认读写当前用户目录，下面显式使用隔离目录，避免更改日常数据：
+
+```powershell
+python -B src/localization/Translation-Dictionary.py --data-dir .m2-lab/demo list --query "New Conversation"
+python -B src/localization/Translation-Dictionary.py --data-dir .m2-lab/demo pending
+```
+
+按 `--help` 使用 `set`／`restore-default`，提供 `dictionaryRevision`；`accept`／`reject`／`unblock` 使用 `candidatesRevision`，均通过 `--revision` 传入。`accept --translation` 可编辑后采纳；`cleanup` 仅清理到期候选。完整步骤见 [M2 使用说明](development/M2-dictionary-review.md#4-使用方式已知问题及恢复方法)。
 
 重新汉化、官方更新与 `src/localization/Restore.py` 不删除用户目录。官方更新可能覆盖注入，使补译暂停；重新验证并汉化后才恢复。还原英文不是清除个人数据，清除账户/密钥需另行处理。
 
@@ -129,6 +144,7 @@ python src/localization/Inspect-Translation-Compatibility.py /path/to/extracted-
 
 - `src/localization/Antigravity-Patcher.py`、`src/localization/Restore.py`、`src/localization/antigravity_common.py`；
 - `src/localization/translation_integration.py` 与完整 `localization_runtime/`（包括兼容注册表）；
+- `src/localization/builtin_dictionary.py`、`translation_service.py` 和 `Translation-Dictionary.py`；内置 JSON 也随整个 runtime 目录分发；
 - `src/localization/Translation-Settings.py`、`src/localization/translation_config.py`；
 - `src/localization/Inspect-Translation-Compatibility.py`；
 - 代理功能仍需 `src/proxy/Setup-Proxy-Shortcuts.py` 和同目录的 `Cleanup-Proxy-Shortcuts.py`。

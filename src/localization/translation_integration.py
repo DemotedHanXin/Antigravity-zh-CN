@@ -229,7 +229,7 @@ def preload_extension(profile):
 """ + dom_source + """
     })(__dgModule, __dgModule.exports);
     const { ipcRenderer: __dgIpc } = require('electron');
-    let __dgSnapshot = { enabled: false, configRevision: -1, dictionaryRevision: -1, pageEpoch: -1, entries: {} };
+    let __dgSnapshot = { enabled: false, configRevision: -1, dictionaryRevision: -1, candidatesRevision: -1, pageEpoch: -1, entries: {}, candidates: {}, rejected: {} };
     const __dgTranslator = __dgModule.exports.createDOMTranslator({
       document, MutationObserver,
       syncTranslate: (text) => {
@@ -238,35 +238,53 @@ def preload_extension(profile):
       },
       policy: """ + policy + """,
       getSnapshot: () => __dgSnapshot,
-      bridge: { translate: (envelope) => __dgIpc.invoke('dragongirl:v1:translate', envelope) }
+      bridge: { translate: async (envelope) => {
+        const result = await __dgIpc.invoke('dragongirl:v1:translate', envelope);
+        if (result && ['candidates_updated', 'stale'].includes(result.status)) await __dgRefresh();
+        return result;
+      } }
     });
     let __dgRefreshRunning = false;
+    let __dgRefreshQueued = false;
     let __dgDisposed = false;
     async function __dgRefresh() {
-      if (__dgRefreshRunning || __dgDisposed) return;
+      if (__dgDisposed) return;
+      if (__dgRefreshRunning) { __dgRefreshQueued = true; return; }
       __dgRefreshRunning = true;
       try {
         const next = await __dgIpc.invoke('dragongirl:v1:snapshot', {version:1});
         if (__dgDisposed) return;
         if (!next || next.version !== 1 || typeof next.enabled !== 'boolean' ||
-            ![next.configRevision, next.dictionaryRevision, next.cacheEpoch].every(n => Number.isSafeInteger(n) && n >= 0) ||
+            ![next.configRevision, next.dictionaryRevision, next.candidatesRevision, next.cacheEpoch].every(n => Number.isSafeInteger(n) && n >= 0) ||
             !Number.isSafeInteger(next.pageEpoch) || next.pageEpoch < 1 ||
             !next.entries || typeof next.entries !== 'object' || Array.isArray(next.entries) ||
             Object.keys(next.entries).length > 10000 ||
             Object.entries(next.entries).some(([key, value]) => !key || key.length > 500 ||
-              ['__proto__', 'constructor', 'prototype'].includes(key) || typeof value !== 'string' || value.length > 2000)) {
+              ['__proto__', 'constructor', 'prototype'].includes(key) || typeof value !== 'string' || value.length > 2000) ||
+            !next.candidates || typeof next.candidates !== 'object' || Array.isArray(next.candidates) || Object.keys(next.candidates).length > 10000 ||
+            Object.entries(next.candidates).some(([key, value]) => !key || key.length > 500 || ['__proto__', 'constructor', 'prototype'].includes(key) ||
+              !value || typeof value !== 'object' || Array.isArray(value) || value.source !== 'ai' || typeof value.translation !== 'string' || value.translation.length > 2000 ||
+              !Number.isSafeInteger(value.createdAt) || value.createdAt < 0 || !Number.isSafeInteger(value.expiresAt) || value.expiresAt !== value.createdAt + 604800000) ||
+            !next.rejected || typeof next.rejected !== 'object' || Array.isArray(next.rejected) || Object.keys(next.rejected).length > 10000 ||
+            Object.entries(next.rejected).some(([key, value]) => !key || key.length > 500 || ['__proto__', 'constructor', 'prototype'].includes(key) || value !== true)) {
           throw new Error('Invalid snapshot');
         }
+        const visibilityChanged = JSON.stringify(next.candidates) !== JSON.stringify(__dgSnapshot.candidates);
         const changed = next.configRevision !== __dgSnapshot.configRevision ||
           next.dictionaryRevision !== __dgSnapshot.dictionaryRevision ||
+          next.candidatesRevision !== __dgSnapshot.candidatesRevision ||
           next.cacheEpoch !== __dgSnapshot.cacheEpoch || next.enabled !== __dgSnapshot.enabled ||
           next.pageEpoch !== __dgSnapshot.pageEpoch;
         __dgSnapshot = next;
         if (changed) { __dgTranslator.refresh(); __dgTranslator.scan(document.body); }
+        else if (visibilityChanged) __dgTranslator.invalidate();
       } catch (_) {
-        __dgSnapshot = { enabled: false, configRevision: -1, dictionaryRevision: -1, pageEpoch: -1, entries: {} };
+        __dgSnapshot = { enabled: false, configRevision: -1, dictionaryRevision: -1, candidatesRevision: -1, pageEpoch: -1, entries: {}, candidates: {}, rejected: {} };
         __dgTranslator.invalidate();
-      } finally { __dgRefreshRunning = false; }
+      } finally {
+        __dgRefreshRunning = false;
+        if (__dgRefreshQueued && !__dgDisposed) { __dgRefreshQueued = false; await __dgRefresh(); }
+      }
     }
     function __dgStart() { __dgTranslator.start(); __dgRefresh(); }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', __dgStart, {once:true});

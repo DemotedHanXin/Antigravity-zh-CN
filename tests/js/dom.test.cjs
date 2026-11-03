@@ -27,14 +27,16 @@ function fixture(extra = {}) {
   const doc = {}; doc.body = new Element('body'); doc.body.doc = doc;
   const control = doc.body.append(new Element('button', {}, ['verified-label']));
   const text = control.append(new Text('Unknown action'));
-  let snapshot = { enabled: true, configRevision: 1, dictionaryRevision: 0, cacheEpoch: 0, pageEpoch: 0, entries: {} };
+  let snapshot = { enabled: true, configRevision: 1, dictionaryRevision: 0, candidatesRevision: 0, cacheEpoch: 0, pageEpoch: 0, entries: {}, candidates: {}, rejected: {} };
   const calls = []; const resolvers = [];
   const bridge = { translate(request) { calls.push(request); return new Promise(resolve => resolvers.push(resolve)); } };
   const timers = { setTimeout() { return 1; }, clearTimeout() {} };
   const options = { document: doc, timers, bridge, getSnapshot: () => snapshot,
     policy: { verified: true, rules: [{ selector: '.verified-label', contextKind: 'button', text: true, attributes: ['title', 'aria-label'] }] }, ...extra };
   const translator = createDOMTranslator(options);
-  function respond(index = 0, overrides = {}) { const request = calls[index]; resolvers[index]({ ...request, translations: request.items.map(item => ({ id: item.id, text: '未知操作' })), ...overrides }); }
+  function respond(index = 0, overrides = {}) { const request = calls[index]; const response = { ...request, translations: request.items.map(item => ({ id: item.id, text: '未知操作' })), ...overrides };
+    if (Array.isArray(response.translations)) response.translations = response.translations.map(row => ({ source: 'candidate', expiresAt: (extra.clock || Date.now)() + 604800000, ...row }));
+    resolvers[index](response); }
   return { doc, control, text, translator, calls, respond, get snapshot() { return snapshot; }, set snapshot(v) { snapshot = v; } };
 }
 
@@ -153,10 +155,10 @@ test('existing dictionary or partial rule match prevents AI', async () => {
   const f = fixture({ syncTranslate: () => ({ matched: true, value: '已翻译 action' }) });
   f.translator.start(); await f.translator.flush(); assert.equal(f.text.textContent, '已翻译 action'); assert.equal(f.calls.length, 0);
 });
-test('personal dictionary works with AI off and never overrides builtin', async () => {
+test('personal dictionary works with AI off and overrides builtin', async () => {
   const f = fixture(); f.snapshot = { ...f.snapshot, enabled: false, entries: { 'Unknown action': '个人翻译' } };
   f.translator.start(); await f.translator.flush(); assert.equal(f.text.textContent, '个人翻译'); assert.equal(f.calls.length, 0);
-  const g = fixture({ syncTranslate: () => ({ matched: true, value: '内置翻译' }) }); g.snapshot.entries = { 'Unknown action': '个人翻译' }; g.translator.start(); assert.equal(g.text.textContent, '内置翻译');
+  const g = fixture({ syncTranslate: () => ({ matched: true, value: '内置翻译' }) }); g.snapshot.entries = { 'Unknown action': '个人翻译' }; g.translator.start(); assert.equal(g.text.textContent, '个人翻译');
 });
 test('excluded ancestor trees send no text including nested safe-looking buttons', async () => {
   for (const attrs of [{ contenteditable: 'true' }, { 'data-user-content': '' }, { 'data-user-name': '' }, { role: 'log' }, { 'data-artifact-content': '' }]) {
@@ -185,7 +187,7 @@ test('node changed or removed while response pending is never overwritten', asyn
   }
 });
 test('config, dictionary, page and cache version changes discard stale replies', async () => {
-  for (const key of ['configRevision', 'dictionaryRevision', 'pageEpoch', 'cacheEpoch']) {
+  for (const key of ['configRevision', 'dictionaryRevision', 'candidatesRevision', 'pageEpoch', 'cacheEpoch']) {
     const f = fixture(); f.translator.start(); const pending = f.translator.flush(); f.snapshot = { ...f.snapshot, [key]: 2 }; f.respond(); await pending; assert.equal(f.text.textContent, 'Unknown action', key);
   }
 });
@@ -273,4 +275,52 @@ test('queued text moved into excluded content never crosses IPC', async () => {
 test('queued changed or stale-generation text never crosses IPC', async () => {
   const f = fixture(); f.translator.start(); f.text.textContent = 'Secret private user text'; await f.translator.flush(); assert.equal(f.calls.length, 0);
   const g = fixture(); g.translator.start(); g.control.classes = []; await g.translator.flush(); assert.equal(g.calls.length, 0);
+});
+
+function pendingCandidate(translation = '候选译文', createdAt = 1000) {
+  return { source: 'ai', translation, createdAt, expiresAt: createdAt + 604800000 };
+}
+test('candidate tier follows personal and builtin tiers and works with AI disabled', async () => {
+  for (const level of ['personal', 'builtin', 'candidate']) {
+    const f = fixture({ clock: () => 2000, syncTranslate: value => ({ matched: level !== 'candidate', value: '内置翻译' }) });
+    f.snapshot = { ...f.snapshot, enabled: false, candidates: { 'Unknown action': pendingCandidate() }, entries: level === 'personal' ? { 'Unknown action': '个人翻译' } : {} };
+    f.translator.start(); await f.translator.flush();
+    assert.equal(f.text.textContent, {personal:'个人翻译', builtin:'内置翻译', candidate:'候选译文'}[level]); assert.equal(f.calls.length, 0);
+  }
+});
+test('candidate expiry timer restores displayed text at the fixed deadline without snapshot polling', async () => {
+  let now = 2000, id = 0; const scheduled = new Map();
+  const timers = {setTimeout(callback, delay) { scheduled.set(++id, {callback, due: now + delay}); return id; }, clearTimeout(handle) { scheduled.delete(handle); }};
+  const f = fixture({ clock: () => now, timers }); f.snapshot = { ...f.snapshot, enabled: false, candidates: { 'Unknown action': pendingCandidate() } };
+  f.translator.start(); assert.equal(f.text.textContent, '候选译文');
+  const deadline = 604801000; assert.equal([...scheduled.values()][0].due, deadline);
+  now += 1000; f.translator.scan(f.doc.body); assert.equal([...scheduled.values()][0].due, deadline);
+  now = deadline; for (const [key, timer] of [...scheduled]) if (timer.due <= now) { scheduled.delete(key); timer.callback(); }
+  assert.equal(f.text.textContent, 'Unknown action'); assert.equal(scheduled.size, 0); assert.equal(f.calls.length, 0); f.translator.stop();
+});
+test('candidate revision immediately restores and applies adoption, edit, rejection and unblock', async () => {
+  const f = fixture({ clock: () => 2000 }); f.snapshot = { ...f.snapshot, enabled: false, candidates: { 'Unknown action': pendingCandidate() } };
+  f.translator.start(); assert.equal(f.text.textContent, '候选译文');
+  f.snapshot = { ...f.snapshot, dictionaryRevision: 1, candidatesRevision: 1, candidates: {}, entries: { 'Unknown action': '采纳译文' } };
+  f.translator.refresh(); assert.equal(f.text.textContent, '采纳译文');
+  f.snapshot = { ...f.snapshot, dictionaryRevision: 2, entries: { 'Unknown action': '编辑译文' } };
+  f.translator.refresh(); assert.equal(f.text.textContent, '编辑译文');
+  f.snapshot = { ...f.snapshot, enabled: true, dictionaryRevision: 3, candidatesRevision: 2, entries: {}, rejected: { 'Unknown action': true } };
+  f.translator.refresh(); await f.translator.flush(); assert.equal(f.text.textContent, 'Unknown action'); assert.equal(f.calls.length, 0);
+  f.snapshot = { ...f.snapshot, candidatesRevision: 3, rejected: {} }; f.translator.refresh(); const pending = f.translator.flush();
+  assert.equal(f.calls.length, 1); f.respond(); await pending; assert.equal(f.text.textContent, '未知操作');
+});
+test('invalid or expired candidates are never displayed and rejection suppresses new work', async () => {
+  for (const row of [pendingCandidate('候选译文', 0), {...pendingCandidate(), expiresAt: 99999999999}, {...pendingCandidate(), source: 'manual'}]) {
+    const f = fixture({clock:()=>604800000}); f.snapshot = {...f.snapshot, enabled:false, candidates:{'Unknown action':row}};
+    f.translator.start(); assert.equal(f.text.textContent,'Unknown action'); assert.equal(f.calls.length,0);
+  }
+  const f=fixture({clock:()=>2000}); f.snapshot={...f.snapshot,candidates:{'Unknown action':pendingCandidate()},rejected:{'Unknown action':true}};
+  f.translator.start(); await f.translator.flush(); assert.equal(f.text.textContent,'Unknown action'); assert.equal(f.calls.length,0);
+});
+test('expired, unknown-source and post-rejection replies cannot overwrite original text', async () => {
+  for (const row of [{source:'candidate',expiresAt:1000},{source:'ai',expiresAt:999999},{source:'personal',expiresAt:999999}]) {
+    const f=fixture({clock:()=>1000}); f.translator.start();const pending=f.translator.flush();f.respond(0,{translations:[{id:'1',text:'失效译文',...row}]});await pending;assert.equal(f.text.textContent,'Unknown action');
+  }
+  const f=fixture();f.translator.start();const pending=f.translator.flush();f.snapshot={...f.snapshot,candidatesRevision:1,rejected:{'Unknown action':true}};f.translator.refresh();f.respond();await pending;assert.equal(f.text.textContent,'Unknown action');
 });

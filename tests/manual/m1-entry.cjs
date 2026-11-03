@@ -23,6 +23,7 @@ if (entry === '.dragongirl/bootstrap.cjs' && fs.existsSync(path.join(__dirname, 
   if (!['disabled', 'success', 'failure'].includes(mode) || (!controlled && mode !== 'disabled')) throw new Error('Unexpected test mode');
   const runtime = require('./.dragongirl/main.cjs');
   const storage = require('./.dragongirl/storage.cjs');
+  const candidates = storage.defaultCandidates();
   const service = runtime.createService({store: {async read() {
     const config = storage.defaultConfig();
     if (controlled && mode !== 'disabled') {
@@ -30,7 +31,21 @@ if (entry === '.dragongirl/bootstrap.cjs' && fs.existsSync(path.join(__dirname, 
       config.providers.openai.model = 'm1-controlled-fixture';
       config.providers.openai.apiKey = 'fixture-not-a-real-key';
     }
-    return {config, dictionary: storage.defaultDictionary()};
+    return {config, dictionary: storage.defaultDictionary(), candidates: JSON.parse(JSON.stringify(candidates))};
+  }, async saveCandidates(items, guard, now = Date.now()) {
+    if (typeof now === 'function') now = now();
+    const state = await this.read();
+    if (!state.config.enabled) return {saved: [], candidatesRevision: candidates.revision, status: 'disabled'};
+    if (guard.configRevision !== state.config.revision || guard.dictionaryRevision !== state.dictionary.revision) return {saved: [], candidatesRevision: candidates.revision, status: 'stale'};
+    const saved = [];
+    for (const {source, translation} of items) {
+      if (source !== 'Automations' || translation !== '自动化（测试译文）' || guard.epochs[source] !== (candidates.epochs[source] || 0)) continue;
+      if (!Object.prototype.hasOwnProperty.call(candidates.entries, source)) {
+        candidates.entries[source] = {translation, createdAt: now, expiresAt: now + 604800000, context: 'ui'}; candidates.revision++;
+      }
+      saved.push({source, ...candidates.entries[source]});
+    }
+    return {saved, candidatesRevision: candidates.revision, status: 'ok'};
   }}, providerTranslate: async items => {
     if (!controlled || mode === 'disabled') throw new Error('AI disabled in navigation acceptance');
     if (!Array.isArray(items) || !items.length || items.some(item => item.text !== 'Automations')) throw new Error('Unexpected fixture source');

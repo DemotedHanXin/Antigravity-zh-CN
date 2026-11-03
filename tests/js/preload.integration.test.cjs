@@ -55,7 +55,7 @@ function setup(initial = {}, options = {}) {
   const privateText = document.body.append(new Element('section', ['chat']))
     .append(new Element('button', ['fixture-static-label'])).append(new Text('Save'));
   const calls = [], intervals = new Map(), timeouts = new Map(), observers = new Set(); let id = 0;
-  let snapshot = { version: 1, enabled: true, configRevision: 1, dictionaryRevision: 0, cacheEpoch: 0, pageEpoch: 1, entries: {}, ...initial };
+  let snapshot = { version: 1, enabled: true, configRevision: 1, dictionaryRevision: 0, candidatesRevision: 0, cacheEpoch: 0, pageEpoch: 1, entries: {}, candidates: {}, rejected: {}, ...initial };
   const context = {
     document, Node: { TEXT_NODE: 3, ELEMENT_NODE: 1 }, AbortController,
     window: { addEventListener(name, callback) { windowEvents.set(name, callback); } },
@@ -76,7 +76,10 @@ function setup(initial = {}, options = {}) {
       calls.push({ channel, request });
       if (channel === 'dragongirl:v1:snapshot') return snapshot;
       assert.equal(channel, 'dragongirl:v1:translate');
-      return { version: 1, configRevision: request.configRevision, dictionaryRevision: request.dictionaryRevision, cacheEpoch: request.cacheEpoch, status: 'ok', translations: request.items.map(item => ({ id: item.id, text: '精彩测试操作' })) };
+      const response = {version:1,configRevision:request.configRevision,dictionaryRevision:request.dictionaryRevision,candidatesRevision:request.candidatesRevision,cacheEpoch:request.cacheEpoch,translations:[]};
+      if (options.persistFailure) return {...response,status:'save_failed'};
+      const createdAt=Date.now();snapshot={...snapshot,candidatesRevision:snapshot.candidatesRevision+1,candidates:{...snapshot.candidates,...Object.fromEntries(request.items.map(item=>[item.text,{translation:'精彩测试操作',source:'ai',createdAt,expiresAt:createdAt+604800000}]))}};
+      return {...response,status:'candidates_updated'};
     } } }; },
   };
   const keys = Object.keys(context).sort();
@@ -96,7 +99,8 @@ test('generated full verified preload parses, translates static first, and stays
   const snapshots = f.calls.filter(c => c.channel.endsWith(':snapshot')); assert.equal(snapshots[0].request.version, 1);
   const requests = f.calls.filter(c => c.channel.endsWith(':translate')); assert.equal(requests.length, 1);
   assert.equal(requests[0].request.items.length, 1); assert.equal(requests[0].request.items[0].text, 'Wonderful fixture action');
-  assert.deepEqual(Object.keys(requests[0].request).sort(), ['cacheEpoch', 'configRevision', 'dictionaryRevision', 'items', 'version']);
+  assert.deepEqual(Object.keys(requests[0].request).sort(), ['cacheEpoch', 'candidatesRevision', 'configRevision', 'dictionaryRevision', 'items', 'version']);
+  assert.equal(snapshots.length, 2); // A committed candidate triggers refresh without waiting for polling.
 });
 
 test('generated preload supports browser timers that reject foreign receivers', async () => {
@@ -104,7 +108,7 @@ test('generated preload supports browser timers that reject foreign receivers', 
   assert.equal(f.unknown.textContent, '精彩测试操作');
   assert.equal(f.calls.filter(c => c.channel.endsWith(':translate')).length, 1);
   await f.refresh({...f.snapshot, enabled: false});
-  assert.equal(f.unknown.textContent, 'Wonderful fixture action');
+  assert.equal(f.unknown.textContent, '精彩测试操作');
 });
 test('polling snapshot refresh updates personal dictionary with AI disabled', async () => {
   const f = setup({ enabled: false, entries: { 'Wonderful fixture action': '个人翻译' } }); await f.drain();
@@ -181,11 +185,11 @@ test('dynamic preload restores translation after a query route denies snapshots 
   await f.refresh({...homeSnapshot, pageEpoch:2});
   assert.equal(f.builtin.textContent, '保存');
   assert.equal(f.unknown.textContent, '精彩测试操作');
-  assert.equal(translations().length, 2);
+  assert.equal(translations().length, 1);
   assert.equal(f.outside.textContent, 'Save');
   assert.equal(f.privateText.textContent, 'Save');
   assert.deepEqual(translations().flatMap(call => call.request.items.map(item => item.text)),
-    ['Wonderful fixture action', 'Wonderful fixture action']);
+    ['Wonderful fixture action']);
 });
 
 test('dynamic preload rescans labels rebuilt during a query route when closing its modal before the next snapshot poll', async () => {
@@ -228,7 +232,26 @@ test('dynamic preload rescans labels rebuilt during a query route when closing i
   await f.refresh({...homeSnapshot, pageEpoch:2});
   assert.equal(rebuiltBuiltin.textContent, '保存');
   assert.equal(rebuiltUnknown.textContent, '精彩测试操作');
-  assert.equal(translations().length, 2);
+  assert.equal(translations().length, 1);
   assert.equal(f.outside.textContent, 'Save');
   assert.equal(f.privateText.textContent, 'Save');
+});
+
+test('generated preload applies personal overrides before builtin and candidate entries',async()=>{
+ const createdAt=Date.now();const f=setup({enabled:false,entries:{Save:'个人保存','Wonderful fixture action':'个人操作'},candidates:{Save:{translation:'候选保存',source:'ai',createdAt,expiresAt:createdAt+604800000}}});await f.drain();
+ assert.equal(f.builtin.textContent,'个人保存');assert.equal(f.unknown.textContent,'个人操作');assert.equal(f.calls.filter(call=>call.channel.endsWith(':translate')).length,0);
+ await f.refresh({...f.snapshot,dictionaryRevision:1,entries:{}});assert.equal(f.builtin.textContent,'保存');assert.equal(f.unknown.textContent,'Wonderful fixture action');
+});
+test('generated preload never displays a provider result when candidate persistence fails',async()=>{
+ const f=setup({}, {persistFailure:true});await f.drain();assert.equal(f.unknown.textContent,'Wonderful fixture action');assert.equal(f.calls.filter(call=>call.channel.endsWith(':snapshot')).length,1);
+});
+test('generated preload rejects missing candidate protocol fields and malformed expiry',async()=>{
+ for(const override of [{candidatesRevision:undefined},{candidates:undefined},{rejected:undefined},{rejected:{Label:'true'}},{candidates:{Label:{translation:'译文',source:'ai',createdAt:1,expiresAt:2}}}]){
+  const f=setup(override);await f.drain();assert.equal(f.unknown.textContent,'Wonderful fixture action');assert.equal(f.calls.filter(call=>call.channel.endsWith(':translate')).length,0);
+ }
+});
+test('same-revision candidate visibility changes are applied after clock rollback recovers',async()=>{
+ const f=setup({enabled:false});await f.drain();assert.equal(f.unknown.textContent,'Wonderful fixture action');
+ const createdAt=Date.now();await f.refresh({...f.snapshot,candidates:{'Wonderful fixture action':{translation:'恢复候选',source:'ai',createdAt,expiresAt:createdAt+604800000}}});
+ assert.equal(f.unknown.textContent,'恢复候选');assert.equal(f.calls.filter(call=>call.channel.endsWith(':translate')).length,0);
 });

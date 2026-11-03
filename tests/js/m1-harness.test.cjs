@@ -208,10 +208,13 @@ test('controlled modes exercise the real service without disk configuration or n
     try {
       const snapshot = await service.snapshot();
       const response = await service.translate({version: 1, configRevision: snapshot.configRevision,
-        dictionaryRevision: snapshot.dictionaryRevision, cacheEpoch: snapshot.cacheEpoch,
+        dictionaryRevision: snapshot.dictionaryRevision, candidatesRevision: snapshot.candidatesRevision, cacheEpoch: snapshot.cacheEpoch,
         items: [{id: 'fixture', text: 'Automations', safeContextKind: 'navigation'}]});
-      if (mode === 'success') assert.deepEqual(response.translations, [{id: 'fixture', text: '自动化（测试译文）'}]);
-      else assert.equal(response.translations.length, 0);
+      assert.equal(response.translations.length, 0);
+      if (mode === 'success') {
+        assert.equal(response.status, 'candidates_updated');
+        assert.equal((await service.snapshot()).candidates.Automations.translation, '自动化（测试译文）');
+      }
       if (mode === 'disabled') assert.equal(response.status, 'disabled');
       h.request(); await h.tick();
       const result = JSON.parse(h.files.get(h.resultFile));

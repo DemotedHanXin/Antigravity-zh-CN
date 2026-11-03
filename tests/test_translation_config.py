@@ -148,20 +148,25 @@ class TranslationConfigTests(unittest.TestCase):
         self.assertEqual(third['tombstones'], {})
         self.assertEqual(third['revision'], 3)
 
-    def test_ai_cannot_overwrite_manual_or_resurrect_deleted(self):
+    def test_direct_ai_writes_cannot_overwrite_manual_or_resurrect_deleted(self):
         first = self.store.set_entry('Unknown', '手工')
-        self.assertEqual(self.store.set_entry('Unknown', 'AI', first['revision'], 'ai'), first)
-        deleted = self.store.delete_entry('Unknown')
-        self.assertEqual(self.store.set_entry('Unknown', 'AI', deleted['revision'], 'ai'), deleted)
-        with self.assertRaises(config.ConflictError):
+        with self.assertRaises(config.DataError):
             self.store.set_entry('Unknown', 'AI', first['revision'], 'ai')
-        with self.assertRaises(config.ConflictError):
+        self.assertEqual(self.store.read_dictionary(), first)
+        deleted = self.store.delete_entry('Unknown')
+        with self.assertRaises(config.DataError):
+            self.store.set_entry('Unknown', 'AI', deleted['revision'], 'ai')
+        with self.assertRaises(config.DataError):
+            self.store.set_entry('Unknown', 'AI', first['revision'], 'ai')
+        with self.assertRaises(config.DataError):
             self.store.set_entry('Other', '其他', origin='ai')
+        self.assertEqual(self.store.read_dictionary(), deleted)
 
-    def test_ai_persists_only_with_revision_and_records_origin(self):
-        result = self.store.set_entry('Unknown', '未知', 0, 'ai')
-        self.assertEqual(result['entries']['Unknown']['source'], 'ai')
-        self.assertEqual(self.store.read_dictionary(), result)
+    def test_only_review_can_assign_accepted_or_legacy_ai_origin(self):
+        for origin in ('ai', 'accepted', 'legacy-ai'):
+            with self.assertRaises(config.DataError):
+                self.store.set_entry('Unknown', '未知', 0, origin)
+        self.assertFalse(self.directory.exists())
 
     def test_unsafe_and_empty_entries_rejected(self):
         for key in ('', '  ', '__proto__', 'constructor', 'prototype', 'x' * 501):
@@ -255,26 +260,33 @@ class TranslationConfigTests(unittest.TestCase):
         # No network: require storage only, write a fixture through Node's store.
         value = config.default_config()
         value['enabled'] = True
-        value['autoSave'] = True
         value['providers']['openai'].update(model='fixture-model', apiKey='test-only-placeholder')
         value = self.store.save_config(value)
         root = Path(__file__).resolve().parents[1]
         script = """const {Store}=require('./localization_runtime/storage.cjs');
         (async()=>{const s=new Store(process.argv[1]);const x=await s.read();
         if(!x.config.enabled||x.dictionary.revision!==0)throw Error('bad read');
-        const saved=await s.saveAI([{source:'Open fixture',translation:'打开样例'}],0,x.config.revision);
-        if(!saved)throw Error('not saved');process.stdout.write('ok');})().catch(()=>process.exit(1));"""
+        const saved=await s.saveCandidates([{source:'Open fixture',translation:'打开样例'}],
+          {configRevision:x.config.revision,dictionaryRevision:x.dictionary.revision,epochs:{'Open fixture':0}});
+        if(saved.saved.length!==1)throw Error('not saved');process.stdout.write('ok');})().catch(()=>process.exit(1));"""
         result = subprocess.run([shutil.which('node'), '-e', script, str(self.directory)],
             cwd=str(root), capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, 'Node storage contract failed')
         self.assertEqual(result.stdout, 'ok')
-        self.assertEqual(self.store.read_dictionary()['entries']['Open fixture']['translation'], '打开样例')
-        # Python tombstones then prevent Node resurrection without overwriting.
+        state = self.store.read_state()
+        self.assertEqual(state['dictionary']['entries'], {})
+        self.assertEqual(state['candidates']['entries']['Open fixture']['translation'], '打开样例')
+        self.store.accept_candidate('Open fixture', state['candidates']['revision'])
+        self.assertEqual(self.store.read_dictionary()['entries']['Open fixture']['source'], 'accepted')
         deleted = self.store.delete_entry('Open fixture')
+        # A persistent rejection, independently of a deletion tombstone, blocks AI.
+        self.store.reject_candidate('Open fixture', self.store.read_candidates()['revision'])
         script = """const {Store}=require('./localization_runtime/storage.cjs');
         (async()=>{const s=new Store(process.argv[1]);const x=await s.read();
-        const saved=await s.saveAI([{source:'Open fixture',translation:'错误恢复'}],x.dictionary.revision,x.config.revision);
-        if(saved)throw Error('resurrected');})().catch(()=>process.exit(1));"""
+        const saved=await s.saveCandidates([{source:'Open fixture',translation:'错误恢复'}],
+          {configRevision:x.config.revision,dictionaryRevision:x.dictionary.revision,
+           epochs:{'Open fixture':x.candidates.epochs['Open fixture']}});
+        if(saved.saved.length)throw Error('resurrected');})().catch(()=>process.exit(1));"""
         result = subprocess.run([shutil.which('node'), '-e', script, str(self.directory)],
             cwd=str(root), capture_output=True, timeout=10)
         self.assertEqual(result.returncode, 0)
@@ -329,7 +341,7 @@ class TranslationConfigTests(unittest.TestCase):
         value = config.default_config()
         value['providers']['extra'] = {}
         fixtures.append(['config', value])
-        for key in ('__proto__', ' padded ', 'x' * 501):
+        for key in ('__proto__', ' padded ', 'x' * 501, '\ufeffLabel', 'Label\ufeff', '\u0085Label', '\u001cLabel'):
             value = config.default_dictionary()
             value['tombstones'][key] = 0
             fixtures.append(['dictionary', value])

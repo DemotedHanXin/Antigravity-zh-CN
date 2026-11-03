@@ -53,3 +53,7 @@ desktop.ini
 # Local M1 acceptance copies, profiles and screenshots (never distribute app binaries)
 /.m1-lab/
 /.m1-lab-*/
+
+# M2 isolated data migration/review tests; never commit user state or credentials
+/.m2-lab/
+/.m2-lab-*/

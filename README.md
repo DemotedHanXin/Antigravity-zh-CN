@@ -8,25 +8,29 @@
 
 ## Windows 管理器分阶段开发
 
-在 `feat/DragonGirl` 上按 M0–M5 顺序开发 Python + PySide6 管理器。每阶段交付记录文档、本地提交和附注标签，等待用户审核通过后才继续；不自动推送、合并或发布。当前 **M0 已获批准；M1 限定范围的实现和实测已完成，待阶段审核；M2 尚未开始**。
+在 `feat/DragonGirl` 上按 M0–M5 顺序开发 Python + PySide6 管理器。每阶段交付记录文档、本地提交和附注标签，等待用户审核通过后才继续；不自动推送、合并或发布。当前 **M0、M1 已获批准，M2 词典与审核流程已完成、待审核；M3 尚未开始**。
 
-需求、使用与启动规划见 [M0 基线与开发约定](docs/development/M0-baseline.md)，阶段状态及下一步见 [开发进度](docs/development/PROGRESS.md)。PySide6 管理器、个人词典优先、7 天候选缓存和 Windows 安装包均为后续目标；下文仍描述当前已有脚本。
+需求和架构见 [M0 基线与开发约定](docs/development/M0-baseline.md)，当前实现与验证见 [M2 阶段记录](docs/development/M2-dictionary-review.md) 和 [开发进度](docs/development/PROGRESS.md)。PySide6 管理器和 Windows 安装包属于后续阶段。
 
 ## DragonGirl 开发版：请先了解状态
 
-**M1 源码提供 Antigravity 2.28.2 / Windows x64 的限定兼容 profile：`antigravity-2.28.2-win32-x64-navigation`，仍待阶段审核，未发布。** 匹配同时核对入口、preload、窗口／服务模块及外置 `language_server.exe` 的指纹，并绑定实际应用窗口与动态本地服务。
+**M1 已获审核通过，源码提供 Antigravity 2.28.2 / Windows x64 的限定兼容 profile：`antigravity-2.28.2-win32-x64-navigation`，未发布。** 匹配同时核对入口、preload、窗口／服务模块及外置 `language_server.exe` 的指纹，并绑定实际应用窗口与动态本地服务。
 
 重新汉化匹配版本时，旧的广域 DOM observer 会停用，网页翻译范围缩小为根路径 `/`、无 query/hash 时的四个导航正文标签：**New Conversation、Automations、Customizations、Settings**。其他页面正文、Projects 和同名 aria-label 不在此 profile 范围内；原生菜单仍沿用静态汉化。未匹配版本保留原有同步汉化路径。
 
 这四个标签目前都命中内置词典，正常运行不会由它们产生自然未命中的 AI 请求。隔离实测通过人为未命中和本地固定提供方验证了请求、显示、失败、关闭、导航及服务恢复链路，**没有验证真实提供方的页面补译**。仅更新仓库源码不会修改日常安装；需另行对目标安装执行汉化才会应用新 profile。
 
 - 独立 GUI：`python src/localization/Translation-Settings.py`，需要带 Tk 的 Python/桌面环境。
-- 内置词典/规则 → 个人词典 → AI；AI 和自动保存译文默认关闭，原生菜单不接 AI。
+- 个人词典 → 内置词典／规则 → 有效待确认译文 → AI；AI 默认关闭，原生菜单不接个人覆盖或 AI。
+- 新 AI 结果统一进入独立候选，首次生成后保留 7 天、复用不续期；采纳后才进入个人词典，拒绝持续抑制直到解除。
+- 词典／审核 CLI：`python src/localization/Translation-Dictionary.py --help`；内置数据在 `localization_runtime/builtin-dictionary.json`，正则逻辑仍由代码维护。
 - OpenAI Responses、Gemini generateContent、Claude Messages 及自定义 OpenAI 兼容 Chat Completions 四种协议。
 - 密钥明文保存在用户目录，保存前明确提示；配置/个人词典不会随汉化更新或还原删除。
 - 连接测试为单独、需确认的可能计费操作，需要外部 Node；通过不表示真实应用桥接可用。
 
 完整使用方式和边界见 [DragonGirl 说明](docs/DRAGONGIRL.md)；实测证据、最新回归结果及未验证范围见 [M1 阶段记录](docs/development/M1-real-integration.md)。macOS 桥接、真实 AI 页面补译、GUI／冻结包及完整应用覆盖仍未验收。
+
+M2 首次读取旧配置时会迁移到 schema2，保留全部旧手工和历史 AI 词条；历史 AI 标为未审核，不进入过期清理。请同步更新应用内翻译组件，旧组件遇到新格式会暂停增强翻译。源码开发和隔离测试没有迁移日常用户数据；回退 Git 不等于数据降级。
 
 ## 原有功能与修复
 
@@ -181,7 +185,7 @@ node --test tests/js/*.test.cjs
 
 ![Antigravity 中文界面示例](antigravity-chinese.png)
 
-这是历史界面示例，不代表 M1 的覆盖范围或所有版本、动态内容、模型输出均已翻译。新增词条可修改 `src/localization/Antigravity-Patcher.py` 中的翻译字典；匹配 M1 profile 时，新增词条仍受四个固定导航标签的范围限制，扩大范围需要另行验证兼容配置。
+这是历史界面示例，不代表 M1 的覆盖范围或所有版本、动态内容、模型输出均已翻译。内置数据在 `localization_runtime/builtin-dictionary.json`，个人修改通过词典工具保存为覆盖；匹配 profile 时仍受四个固定导航标签的范围限制，扩大范围需要另行验证兼容配置。
 
 ## 贡献与许可
 

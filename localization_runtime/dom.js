@@ -7,6 +7,7 @@
   'use strict';
   const ATTRIBUTES = ['title', 'placeholder', 'aria-label'];
   const MAX_TRACKED_SLOTS = 2048, MAX_PENDING_TASKS = 256, MAX_SCAN_NODES = 10000;
+  const CANDIDATE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
   const EXCLUDED = 'script,style,pre,code,input,textarea,select,option,iframe,webview,' +
     '[contenteditable],[role="textbox"],[role="log"],.monaco-editor,.cm-editor,.CodeMirror,' +
     '.terminal,.xterm,.diff,.chat,.conversation,.message,.thinking,.reasoning,.logs,' +
@@ -34,6 +35,7 @@
     const policy = opts.policy || {}, rules = Array.isArray(policy.rules) ? policy.rules : [];
     const bridge = opts.bridge || {}, getSnapshot = opts.getSnapshot || (() => ({}));
     const syncTranslate = opts.syncTranslate || (value => ({ matched: false, value }));
+    const clock = opts.clock || Date.now;
     const Observer = opts.MutationObserver;
     // Browser timer functions must not receive this wrapper object as `this`.
     // Node's permissive timers hid this error in the original VM fixtures.
@@ -41,14 +43,14 @@
       setTimeout: (callback, delay) => setTimeout(callback, delay),
       clearTimeout: handle => clearTimeout(handle)
     };
-    let stopped = false, observer = null, timer = null, epoch = 0, sequence = 0, active = 0;
+    let stopped = false, observer = null, timer = null, expiryTimer = null, epoch = 0, sequence = 0, active = 0;
     let signature = '', snapshot = {}, tracked = new Set(), slots = new WeakMap();
     const queued = new Map(), inflight = new Map(), cooldown = new Map();
     function readSnapshot() {
       try { return getSnapshot() || {}; } catch (_) { return {}; }
     }
     function stamp(s) {
-      return JSON.stringify([!!s.enabled, s.configRevision, s.dictionaryRevision, s.cacheEpoch, s.pageEpoch]);
+      return JSON.stringify([!!s.enabled, s.configRevision, s.dictionaryRevision, s.candidatesRevision, s.cacheEpoch, s.pageEpoch]);
     }
     function elementFor(node) { return node.nodeType === 3 ? node.parentElement : node; }
     function safeContext(node, attribute) {
@@ -71,10 +73,23 @@
       return null;
     }
     function read(node, attribute) { return attribute ? node.getAttribute(attribute) : node.textContent; }
-    function write(slot, value) {
-      slot.displayed = value;
+    function scheduleExpiry() {
+      if (expiryTimer !== null) timers.clearTimeout(expiryTimer);
+      expiryTimer = null;
+      if (stopped) return;
+      let earliest = Infinity;
+      for (const slot of tracked) if (slot.displayed !== null && slot.expiresAt !== null && slot.node.isConnected) earliest = Math.min(earliest, slot.expiresAt);
+      if (earliest !== Infinity) expiryTimer = timers.setTimeout(() => {
+        expiryTimer = null;
+        if (refresh()) scan(doc.body);
+        scheduleExpiry();
+      }, Math.max(0, Math.min(earliest - clock(), 2147483647)));
+    }
+    function write(slot, value, source = null, expiresAt = null) {
+      slot.displayed = value; slot.source = source; slot.expiresAt = expiresAt;
       if (slot.attribute) slot.node.setAttribute(slot.attribute, value);
       else slot.node.textContent = value;
+      if (expiresAt !== null) scheduleExpiry();
     }
     function retainSpacing(original, translated) {
       return original.slice(0, original.length - original.trimStart().length) + translated.trim() +
@@ -91,7 +106,8 @@
     }
     function refresh() {
       const next = readSnapshot(), nextSignature = stamp(next);
-      if (nextSignature === signature) return false;
+      const expired = [...tracked].some(slot => slot.displayed !== null && slot.expiresAt !== null && slot.expiresAt <= clock());
+      if (nextSignature === signature && !expired) return false;
       clearPending(); snapshot = next; signature = nextSignature;
       for (const slot of tracked) {
         if (!slot.node.isConnected) { tracked.delete(slot); continue; }
@@ -99,8 +115,9 @@
         // Restoration only compares a slot we previously wrote with our exact
         // displayed value; it does not collect new candidates on a denied route.
         if (slot.displayed !== null && read(slot.node, slot.attribute) === slot.displayed) write(slot, slot.original);
-        slot.displayed = null;
+        slot.displayed = null; slot.source = null; slot.expiresAt = null;
       }
+      scheduleExpiry();
       return true;
     }
     function prune() {
@@ -123,10 +140,10 @@
       let slot = map.get(attribute || 'text');
       if (!slot) {
         if (tracked.size >= MAX_TRACKED_SLOTS) return null;
-        slot = { node, attribute, original, displayed: null, generation: 0 };
+        slot = { node, attribute, original, displayed: null, source: null, expiresAt: null, generation: 0 };
         map.set(attribute || 'text', slot); tracked.add(slot);
       } else if (slot.original !== original && slot.displayed !== original) {
-        slot.original = original; slot.displayed = null; slot.generation++;
+        slot.original = original; slot.displayed = null; slot.source = null; slot.expiresAt = null; slot.generation++;
       }
       return slot;
     }
@@ -148,18 +165,28 @@
       const slot = slotFor(node, attribute, original);
       if (!slot) return;
       if (slot.displayed === original) return;
-      let result;
-      try { result = syncTranslate(original); } catch (_) { return; }
-      if (!result || typeof result.value !== 'string') return;
-      if (result.matched) { if (result.value !== original) write(slot, result.value); return; }
       const text = original.trim(), entries = snapshot.entries || {};
       const entry = Object.prototype.hasOwnProperty.call(entries, text) ? entries[text] : null;
       if (typeof entry === 'string' && validTranslation(entry) && placeholders(entry) === placeholders(text)) {
-        write(slot, retainSpacing(original, entry)); return;
+        write(slot, retainSpacing(original, entry), 'personal'); return;
+      }
+      let result;
+      try { result = syncTranslate(original); } catch (_) { return; }
+      if (!result || typeof result.value !== 'string') return;
+      if (result.matched) { if (result.value !== original) write(slot, result.value, 'builtin'); return; }
+      if (Object.prototype.hasOwnProperty.call(snapshot.rejected || {}, text)) return;
+      const candidates = snapshot.candidates || {};
+      const pendingEntry = Object.prototype.hasOwnProperty.call(candidates, text) ? candidates[text] : null;
+      if (pendingEntry && pendingEntry.source === 'ai' && validTranslation(pendingEntry.translation) &&
+          placeholders(pendingEntry.translation) === placeholders(text) &&
+          Number.isSafeInteger(pendingEntry.createdAt) && pendingEntry.createdAt >= 0 &&
+          Number.isSafeInteger(pendingEntry.expiresAt) && pendingEntry.expiresAt === pendingEntry.createdAt + CANDIDATE_TTL_MS &&
+          pendingEntry.createdAt <= clock() && clock() < pendingEntry.expiresAt) {
+        write(slot, retainSpacing(original, pendingEntry.translation), 'candidate', pendingEntry.expiresAt); return;
       }
       if (snapshot.enabled !== true || typeof bridge.translate !== 'function') return;
       const key = JSON.stringify([signature, context, text]);
-      if (cooldown.has(key) && cooldown.get(key) > Date.now()) return;
+      if (cooldown.has(key) && cooldown.get(key) > clock()) return;
       let task = queued.get(key) || inflight.get(key);
       if (!task) {
         if (queued.size + inflight.size >= MAX_PENDING_TASKS) return;
@@ -217,26 +244,29 @@
       const cancel = () => controller.abort();
       batch.forEach(task => task.controller.signal.addEventListener('abort', cancel, { once: true }));
       try {
-        const request = { version: 1, configRevision: snapshot.configRevision, dictionaryRevision: snapshot.dictionaryRevision, cacheEpoch: snapshot.cacheEpoch, items: batch.map(task => ({ id: task.id, text: task.text, safeContextKind: task.context })) };
+        const request = { version: 1, configRevision: snapshot.configRevision, dictionaryRevision: snapshot.dictionaryRevision, candidatesRevision: snapshot.candidatesRevision, cacheEpoch: snapshot.cacheEpoch, items: batch.map(task => ({ id: task.id, text: task.text, safeContextKind: task.context })) };
         const response = await bridge.translate(request, { signal: controller.signal });
-        if (!response || response.version !== 1 || response.configRevision !== request.configRevision || response.dictionaryRevision !== request.dictionaryRevision || response.cacheEpoch !== request.cacheEpoch) throw new Error('stale response');
+        if (!response || response.version !== 1 || response.configRevision !== request.configRevision || response.dictionaryRevision !== request.dictionaryRevision || response.candidatesRevision !== request.candidatesRevision || response.cacheEpoch !== request.cacheEpoch) throw new Error('stale response');
         const rows = response.translations;
         if (!Array.isArray(rows) || rows.length > batch.length) throw new Error('invalid response');
         const results = new Map();
         for (const row of rows) {
           if (!row || typeof row.id !== 'string' || results.has(row.id) || !batch.some(t => t.id === row.id) || !validTranslation(row.text)) throw new Error('invalid response');
+          if (row.source !== 'personal' && row.source !== 'candidate') throw new Error('invalid response source');
+          if (row.source === 'candidate' ? (!Number.isSafeInteger(row.expiresAt) || row.expiresAt <= clock()) : row.expiresAt !== null) throw new Error('expired response');
           const task = batch.find(t => t.id === row.id);
           if (placeholders(row.text) !== placeholders(task.text)) throw new Error('placeholder mismatch');
-          results.set(row.id, row.text);
+          results.set(row.id, row);
         }
         for (const task of batch) {
-          if (!results.has(task.id)) { cooldown.set(task.key, Date.now() + 30000); continue; }
+          if (!results.has(task.id)) { cooldown.set(task.key, clock() + 30000); continue; }
+          const result = results.get(task.id);
           for (const waiter of task.waiters) {
-            if (current(waiter, task)) write(waiter.slot, retainSpacing(waiter.original, results.get(task.id)));
+            if (current(waiter, task) && (result.source !== 'candidate' || result.expiresAt > clock())) write(waiter.slot, retainSpacing(waiter.original, result.text), result.source, result.expiresAt);
           }
         }
       } catch (_) {
-        for (const task of batch) cooldown.set(task.key, Date.now() + 30000);
+        for (const task of batch) cooldown.set(task.key, clock() + 30000);
         while (cooldown.size > 512) cooldown.delete(cooldown.keys().next().value);
       } finally {
         while (cooldown.size > 512) cooldown.delete(cooldown.keys().next().value);
@@ -277,6 +307,8 @@
     function invalidate() { clearPending(); signature = ''; refresh(); scan(doc.body); }
     function stop() {
       stopped = true; clearPending();
+      if (expiryTimer !== null) timers.clearTimeout(expiryTimer);
+      expiryTimer = null;
       if (observer) observer.disconnect();
       observer = null; tracked.clear(); slots = new WeakMap();
     }

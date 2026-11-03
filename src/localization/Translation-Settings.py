@@ -18,8 +18,8 @@ class SettingsController:
         self.dictionary = None
 
     def reload(self):
-        config = self.store.read_config()
-        dictionary = self.store.read_dictionary()
+        state = self.store.read_state()
+        config, dictionary = state['config'], state['dictionary']
         self.config, self.dictionary = config, dictionary
         return copy.deepcopy(config)
 
@@ -44,6 +44,11 @@ class SettingsController:
     def delete_entry(self, source):
         self.dictionary = self.store.delete_entry(source,
             expected_revision=self.dictionary['revision'])
+
+    def cleanup(self):
+        """Expiry cleanup only; never calls a provider or changes unsaved draft."""
+        state = self.store.cleanup()
+        return state['candidates']['revision']
 
 
 PROBE_STATUSES = {
@@ -128,9 +133,8 @@ def main():
             notebook.add(config_tab, text='AI 配置')
             notebook.add(dict_tab, text='个人词典')
             self.enabled = tk.BooleanVar(value=False)
-            self.auto_save = tk.BooleanVar(value=False)
             ttk.Checkbutton(config_tab, text='启用 AI 补译（需要已验证的应用桥接；保存不代表桥接已可用）', variable=self.enabled).grid(row=0, column=0, columnspan=2, sticky='w')
-            ttk.Checkbutton(config_tab, text='自动保存已验证的 AI 译文（关闭时仅会话缓存）', variable=self.auto_save).grid(row=1, column=0, columnspan=2, sticky='w')
+            ttk.Label(config_tab, text='新 AI 译文进入待确认流程，保留 7 天；采纳后才进入个人词典。').grid(row=1, column=0, columnspan=2, sticky='w')
             self.provider = tk.StringVar(value='openai')
             ttk.Label(config_tab, text='提供商').grid(row=2, column=0, sticky='w', pady=8)
             selector = ttk.Combobox(config_tab, textvariable=self.provider, values=PROVIDERS, state='readonly')
@@ -175,12 +179,23 @@ def main():
             dict_actions = ttk.Frame(dict_tab)
             dict_actions.pack(anchor='w', pady=8)
             ttk.Button(dict_actions, text='保存词条', command=self.save_entry).pack(side='left')
-            ttk.Button(dict_actions, text='删除词条', command=self.delete_entry).pack(side='left', padx=8)
+            ttk.Button(dict_actions, text='删除覆盖／恢复默认', command=self.delete_entry).pack(side='left', padx=8)
             ttk.Button(dict_actions, text='刷新词典', command=self.refresh_dictionary).pack(side='left')
             self.status = tk.StringVar(value='尚未加载')
             ttk.Label(outer, textvariable=self.status, wraplength=800).pack(anchor='w', pady=(8, 0))
             root.protocol('WM_DELETE_WINDOW', self.close)
             self.load()
+            self.cleanup_timer = root.after(60000, self.cleanup_candidates)
+
+        def cleanup_candidates(self):
+            if not self.busy:
+                try:
+                    self.controller.cleanup()
+                except DataError as error:
+                    self.status.set(str(error))
+                except OSError:
+                    self.status.set('待确认译文清理未完成；请检查文件权限和锁状态。')
+            self.cleanup_timer = self.root.after(60000, self.cleanup_candidates)
 
         def perform(self, operation):
             if self.busy:
@@ -202,7 +217,7 @@ def main():
                 raise DataError('现有配置加载失败，不能覆盖保存。')
             self.draft['providers'][self.active_provider] = {key: variable.get().strip() for key, variable in self.fields.items()}
             self.draft['enabled'] = self.enabled.get()
-            self.draft['autoSave'] = self.auto_save.get()
+            self.draft['autoSave'] = False  # Retired schema compatibility field; new results are candidates.
             self.draft['provider'] = self.provider.get()
 
         def display_provider(self):
@@ -224,7 +239,6 @@ def main():
                 self.active_provider = self.draft['provider']
                 self.provider.set(self.active_provider)
                 self.enabled.set(self.draft['enabled'])
-                self.auto_save.set(self.draft['autoSave'])
                 self.display_provider()
                 self.render_dictionary()
                 self.status.set('配置已加载；未发起任何网络请求。')
@@ -291,7 +305,8 @@ def main():
                 return
             self.tree.delete(*self.tree.get_children())
             for index, (original, item) in enumerate(self.controller.entries(self.query.get())):
-                self.tree.insert('', 'end', iid=str(index), values=(original, item['translation'], item['source']))
+                origin = {'manual': '手工', 'accepted': '已采纳', 'legacy-ai': '历史 AI（未审核）'}.get(item['source'], item['source'])
+                self.tree.insert('', 'end', iid=str(index), values=(original, item['translation'], origin))
 
         def select_entry(self, _event=None):
             selected = self.tree.selection()
@@ -312,7 +327,7 @@ def main():
         def delete_entry(self):
             if not self.original.get().strip():
                 return
-            if not messagebox.askyesno('删除词条', '确认删除此原文对应的词条？在途 AI 结果不会恢复已删除条目。', parent=self.root):
+            if not messagebox.askyesno('删除覆盖／恢复默认', '删除个人覆盖后使用内置译文；没有内置译文时允许正常补译。旧在途响应不能恢复本次已删除条目。', parent=self.root):
                 return
             def operation():
                 if self.controller.dictionary is None:
@@ -336,6 +351,7 @@ def main():
                 messagebox.showinfo('连接测试进行中', '请等待测试返回或超时后关闭，避免留下未完成的网络请求。', parent=self.root)
                 return
             if messagebox.askyesno('关闭设置', '未点击保存的编辑会被丢弃。确定关闭？', parent=self.root):
+                self.root.after_cancel(self.cleanup_timer)
                 self.root.destroy()
 
     try:

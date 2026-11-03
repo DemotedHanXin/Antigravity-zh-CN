@@ -47,7 +47,7 @@ class ShippedProfileTests(unittest.TestCase):
             self.assertTrue(rule['selector'].startswith('#root > '))
         self.assertNotIn('runtimeIntegrity', profile)
         self.assertEqual(profile['review']['providerValidation'], 'controlled-local-response-only')
-        self.assertEqual(profile['review']['stageApproval'], 'pending')
+        self.assertEqual(profile['review']['stageApproval'], 'approved')
         self.assertEqual((profile['review']['platform'], profile['review']['architecture']), ('win32', 'x64'))
         self.assertTrue((ROOT / profile['review']['evidenceDocument']).is_file())
 

@@ -72,7 +72,7 @@
       },
       "review": {
         "stage": "M1",
-        "stageApproval": "pending",
+        "stageApproval": "approved",
         "runtimeValidation": "scoped",
         "validatedOn": "2026-11-03",
         "platform": "win32",
@@ -90,5 +90,5 @@
       }
     }
   ],
-  "note": "Only the exact reviewed 2.28.2 Windows x64 build and four navigation labels are covered. M1 awaits user stage review; this is not full UI, external AI provider or release acceptance. Unknown builds retain dictionary-only localization."
+  "note": "Only the exact reviewed 2.28.2 Windows x64 build and four navigation labels are covered. M1 was approved by the user; this is not full UI, external AI provider or release acceptance. Unknown builds retain dictionary-only localization."
 }

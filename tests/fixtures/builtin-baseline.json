@@ -1,0 +1,109 @@
+{
+  "sourceCommit": "3435cbaf6c215e7eab8957cbc0c5aabb79a33e3f",
+  "sourceFile": "src/localization/Antigravity-Patcher.py",
+  "canonicalEncoding": "JSON with sorted object keys, ensure_ascii=true, compact separators; array order retained",
+  "duplicatePolicy": "JavaScript object literals use the final definition of a key; extracted JSON contains each effective key once",
+  "groups": {
+    "dictionary": {
+      "effectiveCount": 676,
+      "sha256": "7ffc26d52bd4ad151f17919de7807a686c86fad065e14130e1649c52ff98c29b",
+      "definitionCount": 683,
+      "duplicateDefinitions": {
+        "Submit": [
+          "提交",
+          "提交"
+        ],
+        "Allow write access to this path?": [
+          "允许对此路径写入吗？",
+          "允许写入此路径吗？"
+        ],
+        "Yes, allow this time": [
+          "是，仅允许本次",
+          "是，仅本次允许"
+        ],
+        "Yes, and always allow in this conversation": [
+          "是，并在本次对话中始终允许",
+          "是，在本次对话中始终允许"
+        ],
+        "Yes, and always allow when not in a project": [
+          "是，并在非项目中始终允许",
+          "是，在未分组项目中始终允许"
+        ],
+        "Yes, and always allow": [
+          "是，始终允许",
+          "是，始终允许"
+        ],
+        "Skip": [
+          "跳过",
+          "跳过"
+        ]
+      }
+    },
+    "coreWords": {
+      "effectiveCount": 70,
+      "sha256": "1960c0b563048355e0e58d3d0f7a50f087a4d9fb6ca4f0d3e346d4e5b7eded97",
+      "definitionCount": 70,
+      "duplicateDefinitions": {}
+    },
+    "textPrefixRules": {
+      "effectiveCount": 106,
+      "sha256": "47310eea8248495f1c49b0a4044b39ae07305d1884e9bbebf55b2518270a3d83"
+    },
+    "menuTranslationMap": {
+      "effectiveCount": 36,
+      "sha256": "b7fafde6aac6fd7f496c017d155359597e82b1bb7dded3db2c4a3688a80de8d6",
+      "definitionCount": 36,
+      "duplicateDefinitions": {}
+    }
+  },
+  "translationCases": [
+    {
+      "text": "  Save  ",
+      "value": "  保存  "
+    },
+    {
+      "text": "Allow write access to this path?",
+      "value": "允许写入此路径吗？"
+    },
+    {
+      "text": "Yes, allow this time",
+      "value": "是，仅本次允许"
+    },
+    {
+      "text": "Show 2 breakdowns",
+      "value": "显示 2 项明细"
+    },
+    {
+      "text": "Explored 3 files >",
+      "value": "已浏览 3 个文件 >"
+    },
+    {
+      "text": "Editing example.txt +12 -4",
+      "value": "正在编辑 example.txt +12 -4"
+    },
+    {
+      "text": "50% of the customization budget is available.",
+      "value": "自定义项预算可用额度为 50%。"
+    },
+    {
+      "text": "Plugins are packaged collections of skills and MCPs to help the Agent in a product",
+      "value": "插件是技能和 MCP 的打包集合，用于帮助 "
+    },
+    {
+      "text": "  RETRY  ",
+      "value": "  重试  "
+    },
+    {
+      "text": "Unlisted sample text 012345",
+      "value": "Unlisted sample text 012345"
+    },
+    {
+      "text": "",
+      "value": ""
+    },
+    {
+      "text": null,
+      "value": null
+    }
+  ]
+}

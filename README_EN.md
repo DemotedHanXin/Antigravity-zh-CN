@@ -8,25 +8,29 @@ This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigra
 
 ## Staged Windows manager development
 
-Development stays on `feat/DragonGirl`, progressing from M0 through M5. Each stage delivers documentation, a local commit and an annotated review tag, then stops for explicit user approval. No automatic push, merge or release is included. **M0 is approved. M1 implementation and validation within its limited scope are complete, pending stage review. M2 has not started.**
+Development stays on `feat/DragonGirl`, progressing from M0 through M5. Each stage delivers documentation, a local commit and an annotated review tag, then stops for explicit user approval. No automatic push, merge or release is included. **M0 and M1 are approved. M2 dictionary and review workflows are complete, pending review; M3 has not started.**
 
-See the [M0 baseline and development agreement](docs/development/M0-baseline.md) and [progress tracker](docs/development/PROGRESS.md) (Chinese). The PySide6 manager, personal-dictionary precedence, seven-day candidate cache and Windows installer are planned capabilities. The sections below describe the existing scripts.
+See the [M0 agreement](docs/development/M0-baseline.md), [M2 record](docs/development/M2-dictionary-review.md) and [progress tracker](docs/development/PROGRESS.md) (Chinese). The PySide6 manager and Windows installer remain later-stage work.
 
 ## DragonGirl development status — read first
 
-**The M1 source includes the limited `antigravity-2.28.2-win32-x64-navigation` profile for Antigravity 2.28.2 / Windows x64. It is pending stage review and has not been released.** Matching checks fingerprints of the entry point, preload, window/service modules and external `language_server.exe`, and binds the actual application window to its dynamic local service.
+**M1 is approved. The source includes the limited `antigravity-2.28.2-win32-x64-navigation` profile for Antigravity 2.28.2 / Windows x64; it has not been released.** Matching checks fingerprints of the entry point, preload, window/service modules and external `language_server.exe`, and binds the actual application window to its dynamic local service.
 
 Repatching a matching build disables the legacy broad DOM observer. Web translation then covers **only four navigation body labels on `/`, with no query string or hash: New Conversation, Automations, Customizations and Settings**. Other page text, Projects and same-text aria-labels are outside this profile. Native menus retain static localization. Unmatched builds retain the legacy synchronous localization path.
 
 All four labels currently match the built-in dictionary, so they do not naturally generate AI fallback requests. Isolated real-application tests used a deliberately missed label and a local fixed provider to validate requests, display, failures, disabled mode, navigation and service recovery. **Real-provider page translation has not been validated.** Updating repository files does not change the user's daily installation; applying the patch to a chosen installation is a separate operation.
 
 - Independent settings GUI: `python src/localization/Translation-Settings.py`; requires Tk and a desktop display.
-- Order: built-in dictionary/rules → personal dictionary → AI. AI and automatic translation persistence are off by default; native menus remain dictionary-only.
+- Order: personal dictionary → built-in dictionary/rules → valid pending candidate → AI. AI is off by default; native menus remain static.
+- New AI results enter a separate seven-day candidate store. Reuse never extends expiry; acceptance creates a personal entry, and rejection suppresses requests until explicitly lifted.
+- Dictionary/review CLI: `python src/localization/Translation-Dictionary.py --help`. Static data lives in `localization_runtime/builtin-dictionary.json`; regex logic stays in code.
 - Separate OpenAI Responses, Gemini generateContent, Claude Messages, and custom OpenAI-compatible Chat Completions adapters.
 - Keys are stored **in plaintext** in the user directory with an explicit save warning. Repatching/restoration do not delete settings or the personal dictionary.
 - Connection testing is an explicit, potentially billable action requiring confirmation and external Node. Success does not establish application compatibility.
 
 See the [DragonGirl guide](docs/DRAGONGIRL.md) and [M1 record](docs/development/M1-real-integration.md) (Chinese) for scope, evidence, current regression results and remaining limits. macOS integration, real-provider page translation, GUI/frozen packages and full application coverage remain unvalidated.
+
+M2 migrates old data to schema 2 on first use, retaining manual entries and marking saved AI entries as legacy/unreviewed. Legacy entries do not expire. Update the installed component together with the tools: old components reject the new format. Development tests have not migrated daily user data, and reverting Git is not a data downgrade.
 
 ## Existing features and repairs
 
@@ -174,7 +178,7 @@ See [PROJECT_STATUS.md](PROJECT_STATUS.md) for module responsibilities, file sta
 
 ![Antigravity Chinese UI example](antigravity-chinese.png)
 
-This historical example does not represent M1 coverage or complete translation of every version or generated content. Dictionary entries live in `src/localization/Antigravity-Patcher.py`; matching M1 builds still restrict them to the four fixed navigation labels. Expanding that scope requires separate compatibility validation.
+This historical example does not represent M1 coverage or complete translation of every version or generated content. Static entries live in `localization_runtime/builtin-dictionary.json`; matching builds still restrict them to the four fixed navigation labels. Expanding that scope requires separate compatibility validation.
 
 ## Contributing and license
 

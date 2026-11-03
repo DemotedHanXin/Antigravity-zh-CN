@@ -1,6 +1,12 @@
 # DragonGirl 验证记录
 
-当前状态（2026-11-03，Asia/Shanghai）：M0 已获批准；M1 限定范围实现与实测已完成，待阶段审核；M2 尚未开始。最新测试结果和阶段交付以 [M1 记录](development/M1-real-integration.md) 与 [开发进度](development/PROGRESS.md) 为准。下文按日期保留历史结果，早期“尚未验证／profiles 为空”仅描述当时状态。
+当前状态（2026-11-03，Asia/Shanghai）：M0、M1 已获批准，M2 已完成、待审核，M3 未开始。最新测试结果和阶段交付以 [M2 记录](development/M2-dictionary-review.md) 与 [开发进度](development/PROGRESS.md) 为准；真实应用接入证据见 [M1 记录](development/M1-real-integration.md)。下文按日期保留历史结果，早期“尚未验证／profiles 为空”仅描述当时状态。
+
+## 2026-11-03：M2 词典与审核流程
+
+Python 完整回归 218 项（214 通过、4 跳过），JavaScript 194 项（193 通过、1 跳过），无失败。最后 UTF-8/BOM 收紧后的 Node 存储 14 项、审核元数据更新后的兼容专项 32 项（30 通过、2 跳过）也通过。验证内置数据提取一致性、个人覆盖／恢复默认、七天候选、采纳／拒绝／解除、跨语言迁移、事务继续提交和并发失效。独立审阅发现的到期竞态、损坏编码、容量与空白规则问题已修复并复核。
+
+使用原始归档的相关文件在临时目录验证 M2 注入、生成 JavaScript 和 11 项完整性摘要；没有运行应用。Python 3.8 AST 语法检查通过。本轮未迁移日常用户数据、安装真实组件、调用外部 AI 或进行原生 GUI／冻结包验收；实际生成 preload 的 VM 证据与 M1 真机接入证据分开记录。
 
 ## 2026-10-26：DragonGirl 初始开发（Linux）
 
