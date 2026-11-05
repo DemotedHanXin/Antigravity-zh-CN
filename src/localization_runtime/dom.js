@@ -337,6 +337,11 @@
       }
     }
     function invalidate() { clearPending(); signature = ''; refresh(); scan(doc.body); }
+    function ownsSlot(node, attribute) {
+      // Keep the local dictionary observer from changing a slot managed here,
+      // including a translated slot whose current text no longer matches English.
+      return !!slots.get(node)?.has(attribute || 'text') || !!safeContext(node, attribute);
+    }
     function stop() {
       stopped = true; clearPending();
       if (expiryTimer !== null) timers.clearTimeout(expiryTimer);
@@ -344,7 +349,7 @@
       if (observer) observer.disconnect();
       observer = null; tracked.clear(); slots = new WeakMap();
     }
-    return { start, stop, getStats: () => ({ trackedSlots: tracked.size, queuedTasks: queued.size, inflightTasks: inflight.size, pendingWaiters: [...queued.values(), ...inflight.values()].reduce((sum, task) => sum + task.waiters.length, 0) }), refresh: () => { const changed = refresh(); if (changed) scan(doc.body); return changed; }, invalidate, scan, flush };
+    return { start, stop, ownsSlot, getStats: () => ({ trackedSlots: tracked.size, queuedTasks: queued.size, inflightTasks: inflight.size, pendingWaiters: [...queued.values(), ...inflight.values()].reduce((sum, task) => sum + task.waiters.length, 0) }), refresh: () => { const changed = refresh(); if (changed) scan(doc.body); return changed; }, invalidate, scan, flush };
   }
   return { createDOMTranslator, safeText, validTranslation, EXCLUDED };
 });

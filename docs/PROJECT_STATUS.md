@@ -12,7 +12,7 @@ Windows 管理器开发已建立 [M0 基线与开发约定](development/M0-basel
 
 源码注册表包含 **`antigravity-2.28.2-win32-x64-navigation`** 和 **`antigravity-2.29.0-win32-x64-home-permissions`**，仅适用于各自的 Windows x64 精确指纹样本。匹配核对应用入口、preload、窗口／服务模块及外置 `resources/bin/language_server.exe` 的指纹；运行时绑定实际 Hub 窗口、服务进程与动态本地端口。版本号相同但指纹不同，也不能直接视为兼容。
 
-匹配版本重新汉化后会停用旧的广域 DOM observer。2.28.2 的网页翻译仅覆盖根路径 `/`、无 query/hash 的 **New Conversation、Automations、Customizations、Settings 四个导航正文标签**；2.29.0 还限定处理 Projects、首页问候语、Local Checkout 和权限模式的固定标签／说明。姓名在 AI 请求前替换为 `{{name}}`。聊天、项目名、对话标题、输入、其他页面和同名 aria-label 不在范围内；原生菜单仍使用静态汉化。未匹配版本沿用原有同步汉化路径。2.28.2 四标签全部命中内置词典，不会自然触发 AI。
+2.28.2 匹配后停用旧的广域 DOM observer；2.29.0 已修复为保留原有整页本地词典扫描，以下范围限制针对 AI。2.28.2 的网页翻译仅覆盖根路径 `/`、无 query/hash 的 **New Conversation、Automations、Customizations、Settings 四个导航正文标签**；2.29.0 还限定处理 Projects、首页问候语、Local Checkout 和权限模式的固定标签／说明。姓名在 AI 请求前替换为 `{{name}}`。聊天、项目名、对话标题、输入、其他页面和同名 aria-label 不在范围内；原生菜单仍使用静态汉化。未匹配版本沿用原有同步汉化路径。2.28.2 四标签全部命中内置词典，不会自然触发 AI。
 
 Windows 隔离副本已实测受控未命中的成功／失败／关闭、导航返回、设置页边界、设置工具关闭时运行、归档恢复与解包重建，以及同一应用和窗口内的服务恢复；这些历史实验使用本地固定译文。2026-11-05 的 2.29.0 日常安装另行验证了真实 Gemini 连接、页面候选显示和用户采纳 7 条进入个人词典。源码更新不会自行改动日常安装；应用新 profile 需要另行对明确目标执行汉化。阶段交审不代表发布或用户已批准。
 

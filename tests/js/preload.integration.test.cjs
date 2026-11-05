@@ -20,8 +20,10 @@ restricted['policy']['rules'][0]['sourceTexts'] = ['Save', 'Wonderful fixture ac
 root_restricted = copy.deepcopy(restricted)
 root_restricted['windowBinding']['paths'] = ['/']
 root_restricted['policy']['paths'] = ['/']
+combined = copy.deepcopy(root_restricted)
+combined['localDictionaryFallback'] = True
 print(json.dumps({'static': p.build_dom_injection(profile), 'dynamic': p.build_dom_injection(restricted),
-                 'dynamicRoot': p.build_dom_injection(root_restricted)}))
+                 'dynamicRoot': p.build_dom_injection(root_restricted), 'combined': p.build_dom_injection(combined)}))
 `], { cwd: path.join(ROOT, 'src', 'localization'), encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } }));
 class Element {
   constructor(tag, classes = []) { this.nodeType = 1; this.tagName = tag.toUpperCase(); this.classes = classes; this.childNodes = []; this.attrs = {}; this.isConnected = true; this.textContent = ''; }
@@ -52,6 +54,7 @@ function setup(initial = {}, options = {}) {
   const add = value => document.body.append(new Element('button', ['fixture-static-label'])).append(new Text(value));
   const builtin = add('Save'), unknown = add(options.unknownText || 'Wonderful fixture action');
   const outside = document.body.append(new Element('button')).append(new Text('Save'));
+  const legacyInput = document.body.append(new Element('input')); legacyInput.placeholder = 'Ask anything, @ to mention, / for actions';
   const privateText = document.body.append(new Element('section', ['chat']))
     .append(new Element('button', ['fixture-static-label'])).append(new Text('Save'));
   const calls = [], intervals = new Map(), timeouts = new Map(), observers = new Set(); let id = 0;
@@ -83,13 +86,28 @@ function setup(initial = {}, options = {}) {
     } } }; },
   };
   const keys = Object.keys(context).sort();
-  vm.runInNewContext(options.dynamicRoot ? generated.dynamicRoot : options.dynamic ? generated.dynamic : generated.static, context, { filename: 'generated-verified-preload.js', timeout: 2000 });
+  vm.runInNewContext(options.combined ? generated.combined : options.dynamicRoot ? generated.dynamicRoot : options.dynamic ? generated.dynamic : generated.static, context, { filename: 'generated-verified-preload.js', timeout: 2000 });
   for (const callback of documentEvents.get('DOMContentLoaded') || []) callback();
   async function drain() { await tick(); for (const [key, callback] of [...timeouts]) { timeouts.delete(key); callback(); } await tick(); }
   async function refresh(next) { snapshot = next; for (const callback of intervals.values()) callback(); await drain(); }
   function mutations(records) { for (const observer of [...observers]) observer.callback(records); }
-  return { context, builtin, unknown, outside, privateText, calls, drain, refresh, mutations, keys, intervals, windowEvents, get snapshot() { return snapshot; } };
+  return { context, builtin, unknown, outside, legacyInput, privateText, calls, drain, refresh, mutations, keys, intervals, windowEvents, get snapshot() { return snapshot; } };
 }
+
+test('local dictionary fallback preserves old static coverage alongside restricted AI and personal overrides', async () => {
+  const f = setup({entries:{Save:'个人保存'}}, {combined:true}); await f.drain();
+  assert.equal(f.outside.textContent, '保存');
+  assert.notEqual(f.legacyInput.placeholder, 'Ask anything, @ to mention, / for actions');
+  assert.equal(f.builtin.textContent, '个人保存');
+  assert.equal(f.unknown.textContent, '精彩测试操作');
+  const added = f.context.document.body.append(new Element('span')).append(new Text('Workspace'));
+  const unknown = f.context.document.body.append(new Element('span')).append(new Text('Unreviewed fixture phrase'));
+  f.mutations([{type:'childList',addedNodes:[added,unknown]}]); await f.drain();
+  assert.equal(added.textContent, '工作区');
+  assert.equal(unknown.textContent, 'Unreviewed fixture phrase');
+  const requested = f.calls.filter(c=>c.channel.endsWith(':translate')).flatMap(c=>c.request.items.map(i=>i.text));
+  assert.deepEqual(requested, ['Wonderful fixture action']);
+});
 
 test('generated full verified preload parses, translates static first, and stays private', async () => {
   const f = setup(); await f.drain();

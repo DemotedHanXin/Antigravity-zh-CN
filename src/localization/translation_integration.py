@@ -231,6 +231,7 @@ def preload_extension(profile):
     policy = json.dumps(profile['policy'], ensure_ascii=True)
     return """
   // DragonGirl isolated preload bridge (verified profile only).
+  let __dgOwnsSlot = () => false;
   try {
     const __dgModule = { exports: {} };
     (function(module, exports) {
@@ -252,6 +253,7 @@ def preload_extension(profile):
         return result;
       } }
     });
+    __dgOwnsSlot = (node, attribute) => __dgTranslator.ownsSlot(node, attribute);
     let __dgRefreshRunning = false;
     let __dgRefreshQueued = false;
     let __dgDisposed = false;
@@ -301,7 +303,7 @@ def preload_extension(profile):
     window.addEventListener('pagehide', () => {
       __dgDisposed = true; clearInterval(__dgTimer); __dgTranslator.stop();
     }, {once:true});
-  } catch (_) { /* No unrestricted fallback: leave the original UI unchanged. */ }
+  } catch (_) { /* AI stays disabled; any local dictionary scanner is independent. */ }
 """
 
 

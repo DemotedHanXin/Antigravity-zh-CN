@@ -27,7 +27,7 @@ python main.py --cli --help
 
 **M1 已获审核通过；源码目前提供 Antigravity 2.28.2 和 2.29.0 / Windows x64 的精确指纹 profile，未发布。** 匹配同时核对入口、preload、窗口／服务模块及外置 `language_server.exe` 的指纹，并绑定实际应用窗口与动态本地服务。
 
-2.28.2 profile 仅在根路径 `/`、无 query/hash 时处理 **New Conversation、Automations、Customizations、Settings** 四个导航正文标签。2.29.0 profile 在相同路由条件下增加 Projects、首页问候语、Local Checkout 和权限模式的固定标签／说明。问候语中的姓名会在请求前替换为 `{{name}}`，AI 不接收真实姓名。两者都停用旧的广域 DOM observer；聊天、项目名、对话标题、输入和其他页面不进入 AI。原生菜单仍沿用静态汉化，未匹配版本保留原有同步汉化路径。
+2.28.2 profile 仅在根路径 `/`、无 query/hash 时处理 **New Conversation、Automations、Customizations、Settings** 四个导航正文标签。2.29.0 profile 在相同路由条件下增加 Projects、首页问候语、Local Checkout 和权限模式的固定标签／说明。问候语中的姓名会在请求前替换为 `{{name}}`，AI 不接收真实姓名。2.28.2 停用旧的广域 DOM observer；2.29.0 保留原有整页本地词典扫描，以下限制只针对 AI；聊天、项目名、对话标题、输入和其他页面不进入 AI。原生菜单仍沿用静态汉化，未匹配版本保留原有同步汉化路径。
 
 2.28.2 的四个标签都命中内置词典，正常运行不会由它们产生自然未命中的 AI 请求。2026-11-05 在 2.29.0 日常安装上验证了真实 Gemini 连接、页面自动采集、候选持久化及首页候选译文显示；用户随后采纳了 7 条固定界面文案，个人词典中均标为「已采纳」，并拒绝了问候语候选。仅更新仓库源码不会修改日常安装；需另行对目标安装执行汉化才会应用新 profile。
 

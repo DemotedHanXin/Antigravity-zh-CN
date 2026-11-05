@@ -419,13 +419,25 @@ REQUIRED_PATCH_FILES = ('dist/preload.js', 'dist/menu.js', 'dist/tray.js')
 
 
 def build_dom_injection(profile=None):
-    """A reviewed UI uses one observer; unreviewed versions retain legacy behavior."""
+    """Build restricted AI translation with optional legacy local dictionaries."""
     if profile is None:
         return DOM_TRANSLATOR_INJECTION
     marker = '  const observer = new MutationObserver'
     if DOM_TRANSLATOR_INJECTION.count(marker) != 1:
         raise ValueError('词典注入结构改变，无法安全构造受限 UI 管线')
-    # Keep dictionary/rule functions but never start the old unrestricted scan.
+    if profile.get('localDictionaryFallback') is True:
+        # Preserve existing local-only dictionary coverage. The reviewed DOM
+        # translator owns its slots so personal/candidate translations win.
+        prefix, observer = DOM_TRANSLATOR_INJECTION.split(marker, 1)
+        prefix = prefix.replace('if (node.nodeType === Node.TEXT_NODE) {',
+                                'if (node.nodeType === Node.TEXT_NODE) {\n      if (__dgOwnsSlot(node, null)) return;')
+        for attribute in ('placeholder', 'title'):
+            prefix = prefix.replace('if (node.' + attribute + ') {',
+                                    'if (node.' + attribute + ' && !__dgOwnsSlot(node, "' + attribute + '")) {')
+        prefix = prefix.replace("if (node.getAttribute && node.getAttribute('aria-label')) {",
+                                "if (node.getAttribute && node.getAttribute('aria-label') && !__dgOwnsSlot(node, 'aria-label')) {")
+        return prefix + preload_extension(profile) + marker + observer
+    # Older reviewed profiles retain their original restricted behavior.
     return DOM_TRANSLATOR_INJECTION.split(marker, 1)[0] + preload_extension(profile) + '\n})();\n'
 
 
