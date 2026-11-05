@@ -29,7 +29,7 @@ class ShippedProfileTests(unittest.TestCase):
 
     def test_shipped_profile_is_valid_and_explicitly_scoped(self):
         self.assertEqual(self.registry['schemaVersion'], 1)
-        self.assertEqual(len(self.registry['profiles']), 1)
+        self.assertEqual(len(self.registry['profiles']), 2)
         profile = self.registry['profiles'][0]
         bridge._validate_profile(profile)
         self.assertEqual(profile['id'], 'antigravity-2.28.2-win32-x64-navigation')
@@ -50,6 +50,28 @@ class ShippedProfileTests(unittest.TestCase):
         self.assertEqual(profile['review']['stageApproval'], 'approved')
         self.assertEqual((profile['review']['platform'], profile['review']['architecture']), ('win32', 'x64'))
         self.assertTrue((ROOT / profile['review']['evidenceDocument']).is_file())
+
+    def test_229_profile_collects_only_the_audited_home_and_permission_copy(self):
+        profile = self.registry['profiles'][1]
+        bridge._validate_profile(profile)
+        self.assertEqual(profile['id'], 'antigravity-2.29.0-win32-x64-home-permissions')
+        self.assertEqual(profile['windowBinding'], {'kind': bridge.DYNAMIC_BINDING, 'paths': ['/']})
+        self.assertEqual(profile['policy']['paths'], ['/'])
+        rules = profile['policy']['rules']
+        self.assertTrue(all(rule['text'] is True and 'attributes' not in rule and rule['sourceTexts']
+                            for rule in rules))
+        greeting = next(rule for rule in rules if rule.get('sourceTemplate') == 'home-greeting-name')
+        self.assertEqual(greeting['selector'], bridge.HOME_GREETING_SELECTOR)
+        self.assertIn(bridge.HOME_GREETING_SOURCE, greeting['sourceTexts'])
+        self.assertFalse(any('conversation' in rule['selector'].lower() and
+                             'new-conversation-button' not in rule['selector'] for rule in rules))
+
+    def test_greeting_template_cannot_be_attached_to_a_generic_selector(self):
+        profile = copy.deepcopy(self.registry['profiles'][1])
+        rule = next(rule for rule in profile['policy']['rules'] if 'sourceTemplate' in rule)
+        rule['selector'] = 'h1'
+        with self.assertRaisesRegex(ValueError, '问候语模板'):
+            bridge._validate_profile(profile)
 
     def test_production_policy_and_fingerprints_equal_the_exercised_lab_candidate(self):
         # Prevent production promotion from silently broadening the independently

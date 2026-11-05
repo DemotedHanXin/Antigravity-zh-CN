@@ -88,7 +88,142 @@
           "The reviewed DOM pipeline replaces the legacy broad observer for this exact build."
         ]
       }
+    },
+    {
+      "schemaVersion": 1,
+      "id": "antigravity-2.29.0-win32-x64-home-permissions",
+      "name": "antigravity",
+      "version": "2.29.0",
+      "main": "dist/main.js",
+      "moduleType": "commonjs",
+      "files": {
+        "package.json": "9df24c66d2bf321733019f342d75e459126371b795a67e4a1763b72d2ab2f7f9",
+        "dist/main.js": "e5bf4ae92a586b222034c7de27e0e58dd8922deb0edc9649d290bc06182b2c6c",
+        "dist/preload.js": "2f4348c24fa6feeba6fef81644603304667b43a446b3887370781e90ec37ca2c",
+        "dist/utils.js": "277c626bedc704f12927eee26836350078835eb43ae1847cdc346b0be21b2d9d",
+        "dist/languageServer.js": "6f671aaf1a6812e75bb692e1def7a0b6eb3b2ac27b12cdc066e0b7f39ac723c4",
+        "dist/constants.js": "769ad44506db2723f25c831f63d55cf6409a71ff0c8a6b7db601da184c4f786b"
+      },
+      "resourcesFiles": {
+        "bin/language_server.exe": "c98e7c331da5bcc37002a550e7d625b4c636f775fa2804f73777c6a500e1c3d5"
+      },
+      "verified": true,
+      "preload": "dist/preload.js",
+      "uiResources": [
+        "bin/language_server.exe"
+      ],
+      "windowBinding": {
+        "kind": "antigravity-local-hub-v1",
+        "paths": [
+          "/"
+        ]
+      },
+      "policy": {
+        "verified": true,
+        "paths": [
+          "/"
+        ],
+        "rules": [
+          {
+            "selector": "[data-testid=\"new-conversation-button\"] span",
+            "contextKind": "navigation",
+            "text": true,
+            "sourceTexts": [
+              "New Conversation"
+            ]
+          },
+          {
+            "selector": "[data-testid=\"automations-button\"] span",
+            "contextKind": "navigation",
+            "text": true,
+            "sourceTexts": [
+              "Automations"
+            ]
+          },
+          {
+            "selector": "[data-testid=\"sidebar-navigation-items\"] a[href$=\"/customizations\"] span",
+            "contextKind": "navigation",
+            "text": true,
+            "sourceTexts": [
+              "Customizations"
+            ]
+          },
+          {
+            "selector": "[data-testid=\"settings-button\"] span",
+            "contextKind": "navigation",
+            "text": true,
+            "sourceTexts": [
+              "Settings"
+            ]
+          },
+          {
+            "selector": "[data-testid=\"section-header\"][data-title=\"Projects\"] h2 span",
+            "contextKind": "navigation",
+            "text": true,
+            "sourceTexts": [
+              "Projects"
+            ]
+          },
+          {
+            "selector": "[data-testid=\"home-greeting\"] > h1",
+            "contextKind": "label",
+            "text": true,
+            "sourceTexts": [
+              "Hi {{name}}, what can we get done today?",
+              "What can we get done today?"
+            ],
+            "sourceTemplate": "home-greeting-name"
+          },
+          {
+            "selector": "[aria-label=\"Select Environment\"] span",
+            "contextKind": "toolbar",
+            "text": true,
+            "sourceTexts": [
+              "Local Checkout"
+            ]
+          },
+          {
+            "selector": "[data-testid=\"permissions-selector-trigger\"] > span",
+            "contextKind": "toolbar",
+            "text": true,
+            "sourceTexts": [
+              "Request Review",
+              "Default",
+              "Auto (Preview)",
+              "Turbo"
+            ]
+          },
+          {
+            "selector": "[data-testid=\"permissions-project-options\"] [data-testid^=\"permissions-preset-option-\"] span",
+            "contextKind": "menu",
+            "text": true,
+            "sourceTexts": [
+              "Request Review",
+              "Default",
+              "Auto (Preview)",
+              "Turbo",
+              "Every command requires approval.",
+              "Ask before sensitive operations.",
+              "Automatically decide if commands run.",
+              "Run all commands without restrictions."
+            ]
+          }
+        ]
+      },
+      "review": {
+        "stage": "2.29.0 home and permissions adaptation",
+        "runtimeValidation": "live-home-candidates-observed",
+        "platform": "win32",
+        "architecture": "x64",
+        "scope": "Exact 2.29.0 build; root route without query or hash; audited navigation, greeting, environment and permission preset labels only.",
+        "providerValidation": "gemini-live-candidates-observed",
+        "limitations": [
+          "No chat, project names, conversation titles, input, terminal, code or other routes are collected.",
+          "A first name in the greeting is replaced by {{name}} before any IPC or AI request.",
+          "WebContentsView mode is outside this BrowserWindow binding."
+        ]
+      }
     }
   ],
-  "note": "Only the exact reviewed 2.28.2 Windows x64 build and four navigation labels are covered. M1 was approved by the user; this is not full UI, external AI provider or release acceptance. Unknown builds retain dictionary-only localization."
+  "note": "Exact reviewed 2.28.2 and 2.29.0 Windows x64 builds only. AI text collection follows each profile UI allowlist; unknown builds retain dictionary-only localization."
 }

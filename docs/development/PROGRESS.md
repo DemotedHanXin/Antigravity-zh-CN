@@ -17,6 +17,8 @@
 | 下一阶段 | M4：代理与 Windows 安装包；未开始，须 M3 交付并获用户批准 |
 | 远端操作 | 本阶段不推送、不合并、不发布 |
 
+2026-11-05（Asia/Shanghai）新增 Antigravity 2.29.0 / Windows x64 精确指纹 profile，允许根页面上经审核的导航、问候语、本地环境和权限模式固定文案。问候语先规范化为带 `{{name}}` 的通用句式，姓名只在本机写回时填入。相关 Node/Python 回归通过；隔离副本在常规 Windows 权限下启动并正常退出，但未登录，不能代表首页采集验证。日常安装重新汉化后，桥接完整性验证通过；保存的 Gemini 配置通过固定文案连接测试，真实首页自动持久化并显示候选。用户亲自在管理器中审核并采纳 Local Checkout、Auto (Preview)、Turbo 和四条权限说明，7 条词典来源均为 `accepted`，待确认列表为 0；问候语被拒绝。此项不代表 M4 开始或完整 UI 覆盖。
+
 ```powershell
 git rev-parse 'manager-v0.1.0-m0-review.1^{commit}'
 git show --stat manager-v0.1.0-m0-review.1

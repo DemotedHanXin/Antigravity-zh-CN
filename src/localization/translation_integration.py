@@ -21,6 +21,8 @@ HUB_PRELOAD = "preload: path_1.default.join(__dirname, 'preload.js')"
 HUB_HOOK = "    try { require('../.dragongirl/bootstrap.cjs').registerHubWindow(win, url, path_1.default.join(__dirname, 'preload.js')); } catch (_) {}"
 UI_CONTEXTS = {'toolbar', 'settings', 'navigation', 'menu', 'button', 'label'}
 UI_ATTRIBUTES = {'title', 'placeholder', 'aria-label'}
+HOME_GREETING_SELECTOR = '[data-testid="home-greeting"] > h1'
+HOME_GREETING_SOURCE = 'Hi {{name}}, what can we get done today?'
 
 
 def resource_root():
@@ -136,6 +138,12 @@ def _validate_policy(policy, binding=None):
                            or re.search(r'[A-Za-z]', value) is None for value in sources)
                     or len(set(sources)) != len(sources)):
                 raise ValueError('UI 规则必须包含唯一的固定英文短文案，不能使用空白或非字符串来源')
+        if 'sourceTemplate' in rule:
+            if (rule['sourceTemplate'] != 'home-greeting-name'
+                    or rule['selector'] != HOME_GREETING_SELECTOR
+                    or rule.get('text') is not True or attributes
+                    or HOME_GREETING_SOURCE not in rule.get('sourceTexts', [])):
+                raise ValueError('问候语模板必须绑定到已审核的首页标题及固定通用句式')
 
 
 def _validate_profile(profile):

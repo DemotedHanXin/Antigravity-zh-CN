@@ -10,9 +10,29 @@ class Element {
   matches(selector) {
     return selector.split(',').some(s => {
       s = s.trim();
-      if (s.startsWith('.')) return this.classes.includes(s.slice(1));
-      if (s.startsWith('[')) { const match = s.match(/^\[([^=\]]+)(?:="([^"]*)")?\]$/); return match && Object.hasOwn(this.attrs, match[1]) && (match[2] === undefined || this.attrs[match[1]] === match[2]); }
-      return this.tagName.toLowerCase() === s.toLowerCase();
+      const child = s.lastIndexOf(' > ');
+      if (child !== -1) return this.matches(s.slice(child + 3)) && !!this.parentElement?.matches(s.slice(0, child));
+      const descendant = s.lastIndexOf(' ');
+      if (descendant !== -1) return this.matches(s.slice(descendant + 1)) && !!this.parentElement?.closest(s.slice(0, descendant));
+      const tag = /^[a-z][\w-]*/i.exec(s);
+      if (tag && this.tagName.toLowerCase() !== tag[0].toLowerCase()) return false;
+      let rest = s.slice(tag?.[0].length || 0);
+      while (rest) {
+        if (rest.startsWith('.')) {
+          const match = /^\.([\w-]+)/.exec(rest);
+          if (!match || !this.classes.includes(match[1])) return false;
+          rest = rest.slice(match[0].length);
+        } else if (rest.startsWith('[')) {
+          const match = /^\[([\w-]+)(?:([\^\$]?=)"([^"]*)")?\]/.exec(rest);
+          if (!match || !Object.hasOwn(this.attrs, match[1])) return false;
+          const value = this.attrs[match[1]];
+          if (match[2] === '=' && value !== match[3] ||
+              match[2] === '^=' && !value.startsWith(match[3]) ||
+              match[2] === '$=' && !value.endsWith(match[3])) return false;
+          rest = rest.slice(match[0].length);
+        } else return false;
+      }
+      return true;
     });
   }
   closest(selector) { for (let node = this; node; node = node.parentElement) if (node.matches(selector)) return node; return null; }
@@ -74,6 +94,71 @@ test('reviewed route and exact source constraints reject unrelated page text', a
   f.text.textContent='Unknown action'; f.translator.scan(f.doc.body); const pending=f.translator.flush();
   assert.equal(f.calls.length,1); f.respond(); await pending; assert.equal(f.text.textContent,'未知操作');
   f.translator.scan(f.doc.body); await f.translator.flush(); assert.equal(f.calls.length,1);
+});
+test('2.29 home greeting sends only a generic template and reuses an accepted personal translation', async () => {
+  const canonical = 'Hi {{name}}, what can we get done today?';
+  const selector = '[data-testid="home-greeting"] > h1';
+  const policy = {verified: true, paths: ['/'], rules: [{selector, contextKind: 'label',
+    text: true, sourceTexts: [canonical, 'What can we get done today?'], sourceTemplate: 'home-greeting-name'}]};
+  const f = fixture({policy}); f.doc.location = {pathname: '/'};
+  const greeting = new Element('div', {'data-testid': 'home-greeting'});
+  f.doc.body.childNodes = []; f.doc.body.append(greeting).append(f.control);
+  f.control.tagName = 'h1'; f.text.textContent = 'Hi 小新, what can we get done today?';
+  const unrelated = f.doc.body.append(new Element('a')).append(new Text('Casual Greeting'));
+  let unrelatedReads = 0;
+  Object.defineProperty(unrelated, 'textContent', {get() { unrelatedReads++; throw new Error('unrelated user title read'); }});
+  f.translator.start(); const pending = f.translator.flush();
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.calls[0].items[0].text, canonical);
+  assert.equal(JSON.stringify(f.calls).includes('小新'), false);
+  assert.equal(unrelatedReads, 0);
+  f.respond(0, {translations: [{id: f.calls[0].items[0].id, text: '你好，{{name}}，今天想做什么？'}]});
+  await pending; assert.equal(f.text.textContent, '你好，小新，今天想做什么？');
+  f.snapshot = {...f.snapshot, enabled: false, dictionaryRevision: 1, candidatesRevision: 1,
+    entries: {[canonical]: '嗨，{{name}}，今天要做什么？'}};
+  f.translator.refresh();
+  assert.equal(f.text.textContent, '嗨，小新，今天要做什么？');
+  assert.equal(f.calls.length, 1);
+});
+test('2.29 template rejects a translation that drops the name and never applies a stale name', async () => {
+  const canonical = 'Hi {{name}}, what can we get done today?';
+  const policy = {verified: true, paths: ['/'], rules: [{selector: '[data-testid="home-greeting"] > h1',
+    contextKind: 'label', text: true, sourceTexts: [canonical], sourceTemplate: 'home-greeting-name'}]};
+  const f = fixture({policy}); f.doc.location = {pathname: '/'};
+  const greeting = new Element('div', {'data-testid': 'home-greeting'});
+  f.doc.body.childNodes = []; f.doc.body.append(greeting).append(f.control);
+  f.control.tagName = 'h1'; f.text.textContent = 'Hi xin, what can we get done today?';
+  f.translator.start(); const pending = f.translator.flush();
+  f.respond(0, {translations: [{id: f.calls[0].items[0].id, text: '你好，今天想做什么？'}]});
+  await pending; assert.equal(f.text.textContent, 'Hi xin, what can we get done today?');
+  f.translator.stop();
+  const g = fixture({policy}); g.doc.location = {pathname: '/'};
+  const secondGreeting = new Element('div', {'data-testid': 'home-greeting'});
+  g.doc.body.childNodes = []; g.doc.body.append(secondGreeting).append(g.control);
+  g.control.tagName = 'h1'; g.text.textContent = 'Hi xin, what can we get done today?';
+  g.translator.start(); const stale = g.translator.flush();
+  g.text.textContent = 'Hi bob, what can we get done today?';
+  g.respond(0, {translations: [{id: g.calls[0].items[0].id, text: '你好，{{name}}，今天想做什么？'}]});
+  await stale; assert.equal(g.text.textContent, 'Hi bob, what can we get done today?');
+});
+test('2.29 permission options collect fixed UI descriptions and ignore nearby conversation titles', async () => {
+  const source = 'Automatically decide if commands run.';
+  const policy = {verified: true, paths: ['/'], rules: [{
+    selector: '[data-testid="permissions-project-options"] [data-testid^="permissions-preset-option-"] span',
+    contextKind: 'menu', text: true, sourceTexts: [source]
+  }]};
+  const f = fixture({policy}); f.doc.location = {pathname: '/'};
+  f.doc.body.childNodes = [];
+  const menu = f.doc.body.append(new Element('div', {'data-testid': 'permissions-project-options'}));
+  const option = menu.append(new Element('button', {'data-testid': 'permissions-preset-option-auto'}));
+  const description = option.append(new Element('span')).append(f.text);
+  description.textContent = source;
+  f.doc.body.append(new Element('a')).append(new Text('Casual Greeting'));
+  option.append(new Element('span')).append(new Text('Private project name'));
+  f.translator.start(); const pending = f.translator.flush();
+  assert.deepEqual(f.calls[0].items.map(item => item.text), [source]);
+  f.respond(0, {translations: [{id: f.calls[0].items[0].id, text: '自动决定是否运行命令。'}]});
+  await pending; assert.equal(description.textContent, '自动决定是否运行命令。');
 });
 test('text source checks never read outside selectors, permitted routes or exclusion boundaries', async () => {
   for (const deny of [f => { f.control.classes = []; }, f => { f.doc.location.search = '?private=1'; },

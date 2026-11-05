@@ -10,17 +10,17 @@ Windows 管理器开发已建立 [M0 基线与开发约定](development/M0-basel
 
 新增独立 `src/localization/Translation-Settings.py` / `src/localization/translation_config.py` 管理用户配置和个人词典，`src/localization_runtime/` 提供安全 DOM 管线、主进程 IPC、队列/缓存、四类 API 适配器及显式连接测试；`src/localization/translation_integration.py` 将桥接注入限制在已审核的应用指纹 profile 中。`src/localization/Inspect-Translation-Compatibility.py` 只读检查已解包副本，不会启用 AI。
 
-源码注册表包含 **`antigravity-2.28.2-win32-x64-navigation`**，范围为已验证的 Antigravity 2.28.2 / Windows x64 样本。匹配核对应用入口、preload、窗口／服务模块及外置 `resources/bin/language_server.exe` 的指纹；运行时绑定实际 Hub 窗口、服务进程与动态本地端口。版本号相同但指纹不同，也不能直接视为兼容。
+源码注册表包含 **`antigravity-2.28.2-win32-x64-navigation`** 和 **`antigravity-2.29.0-win32-x64-home-permissions`**，仅适用于各自的 Windows x64 精确指纹样本。匹配核对应用入口、preload、窗口／服务模块及外置 `resources/bin/language_server.exe` 的指纹；运行时绑定实际 Hub 窗口、服务进程与动态本地端口。版本号相同但指纹不同，也不能直接视为兼容。
 
-匹配版本重新汉化后会停用旧的广域 DOM observer，网页翻译仅覆盖根路径 `/`、无 query/hash 的 **New Conversation、Automations、Customizations、Settings 四个导航正文标签**。Projects、其他页面正文和同名 aria-label 不在范围内；原生菜单仍使用静态汉化。未匹配版本沿用原有同步汉化路径。当前四标签全部命中内置词典，正常使用不会由它们触发自然未命中的 AI 请求。
+匹配版本重新汉化后会停用旧的广域 DOM observer。2.28.2 的网页翻译仅覆盖根路径 `/`、无 query/hash 的 **New Conversation、Automations、Customizations、Settings 四个导航正文标签**；2.29.0 还限定处理 Projects、首页问候语、Local Checkout 和权限模式的固定标签／说明。姓名在 AI 请求前替换为 `{{name}}`。聊天、项目名、对话标题、输入、其他页面和同名 aria-label 不在范围内；原生菜单仍使用静态汉化。未匹配版本沿用原有同步汉化路径。2.28.2 四标签全部命中内置词典，不会自然触发 AI。
 
-Windows 隔离副本已实测受控未命中的成功／失败／关闭、导航返回、设置页边界、设置工具关闭时运行、归档恢复与解包重建，以及同一应用和窗口内的服务恢复。受控提供方返回本地固定译文，没有调用真实外部 AI。源码更新不会自行改动日常安装；应用新 profile 需要另行对明确目标执行汉化。阶段交审不代表发布或用户已批准。
+Windows 隔离副本已实测受控未命中的成功／失败／关闭、导航返回、设置页边界、设置工具关闭时运行、归档恢复与解包重建，以及同一应用和窗口内的服务恢复；这些历史实验使用本地固定译文。2026-11-05 的 2.29.0 日常安装另行验证了真实 Gemini 连接、页面候选显示和用户采纳 7 条进入个人词典。源码更新不会自行改动日常安装；应用新 profile 需要另行对明确目标执行汉化。阶段交审不代表发布或用户已批准。
 
 - 默认关闭 AI；新结果先进入七天候选，采纳才写入个人词典，拒绝持续抑制直到解除。原生菜单不接 AI。M3 使用 Windows 当前用户 DPAPI，含密钥配置迁移为磁盘 schema3，旧运行时拒绝新格式。
 - 当前优先级为个人词典 → 内置词典／规则 → 有效候选 → AI；内置四组数据已抽离到 JSON，保留 M1 旧定义的有效值与顺序。
-- schema2 迁移保留手工及历史 AI 词条，后者标为 legacy-ai 而不自动过期；多文件审核通过共享锁和恢复 journal 提交。本轮没有迁移日常数据或更新日常安装。
+- schema2 迁移保留手工及历史 AI 词条，后者标为 legacy-ai 而不自动过期；多文件审核通过共享锁和恢复 journal 提交。早期隔离实验未修改日常安装；2026-11-05 的 2.29.0 实测已应用到明确的日常安装。
 - 用户目录独立于安装和还原范围；JSON 版本、跨进程锁、原子替换、删除记录防止覆盖/复活旧词条。
-- macOS 桥接、四标签之外的 UI 范围、GUI 外观／冻结包和真实提供方页面补译尚未验收。纯 `app.asar` 布局启动未验证；已通过的恢复路径为归档切换、完整性检查、解包重建后启动和登录保留。
+- macOS 桥接、2.29.0 白名单以外的 UI、GUI 外观／冻结包和其他提供方的页面补译尚未验收。纯 `app.asar` 布局启动未验证；已通过的恢复路径为归档切换、完整性检查、解包重建后启动和登录保留。
 - 现有测试的 Windows fixture 已显式模拟平台，保留生产的 Windows/macOS 安装限制；Linux 开发测试不扩展生产平台支持。
 - 新工作流定义只代表 CI 配置，不代表已在 GitHub 执行或通过；当前开发没有推送或发布。
 

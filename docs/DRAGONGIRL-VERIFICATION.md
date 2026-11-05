@@ -1,6 +1,6 @@
 # DragonGirl 验证记录
 
-当前状态（2026-11-05，Asia/Shanghai）：M0–M2 已获批准，M3 已完成、待审核；M4 尚未开始。阶段交付与历史回归见 [M3 记录](development/M3-unified-manager.md)，当前进度见 [开发进度](development/PROGRESS.md)；真实应用接入证据见 [M1 记录](development/M1-real-integration.md)。本次按用户要求整理源码和文档，统一启动入口为 `python main.py`，功能源码集中到 `src/`，除首页外的项目 Markdown 集中到 `docs/`。目录整理不代表进入 M4，也不替代原生 GUI、真实 API 或安装包验收。下文按日期保留历史结果，早期“尚未验证／profiles 为空”仅描述当时状态。
+当前状态（2026-11-05，Asia/Shanghai）：M0–M2 已获批准，M3 已完成、待审核；M4 尚未开始。阶段交付与历史回归见 [M3 记录](development/M3-unified-manager.md)，当前进度见 [开发进度](development/PROGRESS.md)；早期真实应用接入证据见 [M1 记录](development/M1-real-integration.md)。本次按用户要求整理源码和文档，统一启动入口为 `python main.py`，功能源码集中到 `src/`，除首页外的项目 Markdown 集中到 `docs/`。2026-11-05 新增的 2.29.0 精确 profile 已在日常安装上观察到真实 Gemini 页面候选；用户采纳 7 条后，个人词典记录为 `accepted`，待确认列表为 0。问候语由用户拒绝。这不代表进入 M4，也不替代其他版本、提供方、原生 GUI 或安装包验收。下文按日期保留历史结果，早期“尚未验证／profiles 为空”仅描述当时状态。
 
 ## 2026-11-03：M2 词典与审核流程
 

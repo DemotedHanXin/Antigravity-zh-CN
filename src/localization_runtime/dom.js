@@ -8,6 +8,8 @@
   const ATTRIBUTES = ['title', 'placeholder', 'aria-label'];
   const MAX_TRACKED_SLOTS = 2048, MAX_PENDING_TASKS = 256, MAX_SCAN_NODES = 10000;
   const CANDIDATE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+  const HOME_GREETING = 'Hi {{name}}, what can we get done today?';
+  const HOME_GREETING_PATTERN = /^Hi ([^\r\n<>`\\{}]{1,64}), what can we get done today\?$/;
   const EXCLUDED = 'script,style,pre,code,input,textarea,select,option,iframe,webview,' +
     '[contenteditable],[role="textbox"],[role="log"],.monaco-editor,.cm-editor,.CodeMirror,' +
     '.terminal,.xterm,.diff,.chat,.conversation,.message,.thinking,.reasoning,.logs,' +
@@ -66,8 +68,25 @@
           if (!rule || typeof rule.selector !== 'string' || !['toolbar', 'settings', 'navigation', 'menu', 'button', 'label'].includes(rule.contextKind)) continue;
           if (attribute ? (!Array.isArray(rule.attributes) || !rule.attributes.includes(attribute)) : rule.text !== true) continue;
           if (!element.matches(rule.selector)) continue;
-          if (rule.sourceTexts && (!Array.isArray(rule.sourceTexts) || !rule.sourceTexts.includes(String(read(node, attribute) || '').trim()))) continue;
-          return rule.contextKind;
+          const original = read(node, attribute);
+          if (typeof original !== 'string') continue;
+          const sourceText = original.trim();
+          if (!Array.isArray(rule.sourceTexts)) {
+            if (rule.sourceTexts !== undefined) continue;
+            return { kind: rule.contextKind, sourceText, original, templateName: null };
+          }
+          if (rule.sourceTexts.includes(sourceText)) {
+            return { kind: rule.contextKind, sourceText, original, templateName: null };
+          }
+          if (rule.sourceTemplate === 'home-greeting-name' &&
+              rule.selector === '[data-testid="home-greeting"] > h1' &&
+              rule.sourceTexts.includes(HOME_GREETING)) {
+            const match = HOME_GREETING_PATTERN.exec(sourceText);
+            if (match && match[1].trim() === match[1]) {
+              return { kind: rule.contextKind, sourceText: HOME_GREETING, original,
+                templateName: match[1] };
+            }
+          }
         }
       } catch (_) { return null; } // Invalid or changed selector policy fails closed.
       return null;
@@ -130,7 +149,9 @@
       }
       for (const tasks of [queued, inflight]) for (const [key, task] of tasks) {
         task.waiters = task.waiters.filter(waiter => tracked.has(waiter.slot) && waiter.slot.node.isConnected && waiter.generation === waiter.slot.generation &&
-          safeContext(waiter.slot.node, waiter.slot.attribute) === task.context && read(waiter.slot.node, waiter.slot.attribute) === waiter.original);
+          (() => { const context = safeContext(waiter.slot.node, waiter.slot.attribute);
+            return context?.kind === task.context && context.sourceText === task.text &&
+              context.templateName === waiter.templateName && context.original === waiter.original; })());
         if (!task.waiters.length) { task.controller.abort(); tasks.delete(key); }
       }
     }
@@ -149,10 +170,15 @@
     }
     function current(waiter, task) {
       const slot = waiter.slot;
+      const context = safeContext(slot.node, slot.attribute);
       return !stopped && task.epoch === epoch && stamp(readSnapshot()) === task.signature &&
         readSnapshot().enabled === true && slot.generation === waiter.generation &&
-        safeContext(slot.node, slot.attribute) === task.context &&
-        read(slot.node, slot.attribute) === waiter.original;
+        context?.kind === task.context && context.sourceText === task.text &&
+        context.templateName === waiter.templateName && context.original === waiter.original;
+    }
+    function displayValue(original, translated, templateName) {
+      return retainSpacing(original, templateName === null ? translated :
+        translated.replace('{{name}}', templateName));
     }
     function schedule() {
       if (timer === null && !stopped) timer = timers.setTimeout(() => { timer = null; flush(); }, 200);
@@ -160,20 +186,24 @@
     function candidate(node, attribute) {
       const context = safeContext(node, attribute);
       if (!context) return;
-      const original = read(node, attribute);
-      if (!safeText(original)) return;
+      const {original, sourceText: text, templateName} = context;
+      if (!safeText(text)) return;
       const slot = slotFor(node, attribute, original);
       if (!slot) return;
       if (slot.displayed === original) return;
-      const text = original.trim(), entries = snapshot.entries || {};
+      const entries = snapshot.entries || {};
       const entry = Object.prototype.hasOwnProperty.call(entries, text) ? entries[text] : null;
       if (typeof entry === 'string' && validTranslation(entry) && placeholders(entry) === placeholders(text)) {
-        write(slot, retainSpacing(original, entry), 'personal'); return;
+        write(slot, displayValue(original, entry, templateName), 'personal'); return;
       }
       let result;
-      try { result = syncTranslate(original); } catch (_) { return; }
+      try { result = syncTranslate(templateName === null ? original : text); } catch (_) { return; }
       if (!result || typeof result.value !== 'string') return;
-      if (result.matched) { if (result.value !== original) write(slot, result.value, 'builtin'); return; }
+      if (result.matched) {
+        const value = templateName === null ? result.value : displayValue(original, result.value, templateName);
+        if (value !== original) write(slot, value, 'builtin');
+        return;
+      }
       if (Object.prototype.hasOwnProperty.call(snapshot.rejected || {}, text)) return;
       const candidates = snapshot.candidates || {};
       const pendingEntry = Object.prototype.hasOwnProperty.call(candidates, text) ? candidates[text] : null;
@@ -182,19 +212,19 @@
           Number.isSafeInteger(pendingEntry.createdAt) && pendingEntry.createdAt >= 0 &&
           Number.isSafeInteger(pendingEntry.expiresAt) && pendingEntry.expiresAt === pendingEntry.createdAt + CANDIDATE_TTL_MS &&
           pendingEntry.createdAt <= clock() && clock() < pendingEntry.expiresAt) {
-        write(slot, retainSpacing(original, pendingEntry.translation), 'candidate', pendingEntry.expiresAt); return;
+        write(slot, displayValue(original, pendingEntry.translation, templateName), 'candidate', pendingEntry.expiresAt); return;
       }
       if (snapshot.enabled !== true || typeof bridge.translate !== 'function') return;
-      const key = JSON.stringify([signature, context, text]);
+      const key = JSON.stringify([signature, context.kind, text]);
       if (cooldown.has(key) && cooldown.get(key) > clock()) return;
       let task = queued.get(key) || inflight.get(key);
       if (!task) {
         if (queued.size + inflight.size >= MAX_PENDING_TASKS) return;
-        task = { key, id: String(++sequence), text, context, epoch, signature, waiters: [], controller: new AbortController() };
+        task = { key, id: String(++sequence), text, context: context.kind, epoch, signature, waiters: [], controller: new AbortController() };
         queued.set(key, task);
       }
       const prior = task.waiters.findIndex(w => w.slot === slot);
-      const waiter = { slot, generation: slot.generation, original };
+      const waiter = { slot, generation: slot.generation, original, templateName };
       if (prior >= 0) task.waiters[prior] = waiter;
       else {
         let total = 0;
@@ -262,7 +292,9 @@
           if (!results.has(task.id)) { cooldown.set(task.key, clock() + 30000); continue; }
           const result = results.get(task.id);
           for (const waiter of task.waiters) {
-            if (current(waiter, task) && (result.source !== 'candidate' || result.expiresAt > clock())) write(waiter.slot, retainSpacing(waiter.original, result.text), result.source, result.expiresAt);
+            if (current(waiter, task) && (result.source !== 'candidate' || result.expiresAt > clock())) {
+              write(waiter.slot, displayValue(waiter.original, result.text, waiter.templateName), result.source, result.expiresAt);
+            }
           }
         }
       } catch (_) {

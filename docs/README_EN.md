@@ -4,7 +4,7 @@ English | [简体中文](../README.md)
 
 Chinese UI localization, restoration, and Windows proxy launcher / shortcut management for Antigravity Desktop. CLI tools use the Python standard library; the unified manager requires PySide6.
 
-This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN). Legacy translation rules target the v2.21.1 layout; the new, limited 2.28.2 integration is described below. Text coverage and compatibility with other versions are not guaranteed. These changes apply to **the source in this repository**. Previously published executables need rebuilding to include them.
+This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN). Legacy translation rules target the v2.21.1 layout; the limited 2.28.2 and 2.29.0 integrations are described below. Text coverage and compatibility with other versions are not guaranteed. These changes apply to **the source in this repository**. Previously published executables need rebuilding to include them.
 
 ## Staged Windows manager development
 
@@ -25,11 +25,11 @@ python main.py --cli --help
 
 ## DragonGirl development status — read first
 
-**M1 is approved. The source includes the limited `antigravity-2.28.2-win32-x64-navigation` profile for Antigravity 2.28.2 / Windows x64; it has not been released.** Matching checks fingerprints of the entry point, preload, window/service modules and external `language_server.exe`, and binds the actual application window to its dynamic local service.
+**M1 is approved. The source includes exact-fingerprint profiles for Antigravity 2.28.2 and 2.29.0 / Windows x64; neither has been released.** Matching checks fingerprints of the entry point, preload, window/service modules and external `language_server.exe`, and binds the actual application window to its dynamic local service.
 
-Repatching a matching build disables the legacy broad DOM observer. Web translation then covers **only four navigation body labels on `/`, with no query string or hash: New Conversation, Automations, Customizations and Settings**. Other page text, Projects and same-text aria-labels are outside this profile. Native menus retain static localization. Unmatched builds retain the legacy synchronous localization path.
+Repatching a matching build disables the legacy broad DOM observer. The 2.28.2 profile covers **four navigation body labels on `/`, with no query string or hash: New Conversation, Automations, Customizations and Settings**. The 2.29.0 profile also permits Projects, the home greeting, Local Checkout, and fixed permission preset labels and descriptions under the same route constraint. The greeting name is replaced with `{{name}}` before an AI request and filled locally for display. Chat, project and conversation titles, input, code, terminals and other routes are excluded. Native menus retain static localization. Unmatched builds retain the legacy synchronous localization path.
 
-All four labels currently match the built-in dictionary, so they do not naturally generate AI fallback requests. Isolated real-application tests used a deliberately missed label and a local fixed provider to validate requests, display, failures, disabled mode, navigation and service recovery. **Real-provider page translation has not been validated.** Updating repository files does not change the user's daily installation; applying the patch to a chosen installation is a separate operation.
+The four 2.28.2 labels match the built-in dictionary, so they do not naturally generate AI fallback requests. Isolated tests used a deliberately missed label and a local fixed provider. On November 5, 2026, the installed 2.29.0 application generated and displayed candidates from a live Gemini configuration. The user accepted seven fixed UI strings into the personal dictionary and rejected the greeting template. Updating repository files does not change a daily installation; applying the patch to a chosen installation is a separate operation.
 
 - Unified manager: `python main.py`. The older Tk settings tool remains available.
 - Order: personal dictionary → built-in dictionary/rules → valid pending candidate → AI. AI is off by default; native menus remain static.
@@ -39,7 +39,7 @@ All four labels currently match the built-in dictionary, so they do not naturall
 - Windows keys use current-user DPAPI protection; existing plaintext configuration migrates on first read. Another account cannot directly decrypt it. Repatching/restoration do not delete settings or the personal dictionary.
 - Connection testing is an explicit, potentially billable action requiring confirmation and external Node. Success does not establish application compatibility.
 
-See the [DragonGirl guide](DRAGONGIRL.md) and [M1 record](development/M1-real-integration.md) (Chinese) for scope, evidence, current regression results and remaining limits. macOS integration, real-provider page translation, GUI/frozen packages and full application coverage remain unvalidated.
+See the [DragonGirl guide](DRAGONGIRL.md) and [M1 record](development/M1-real-integration.md) (Chinese) for scope, evidence, current regression results and remaining limits. macOS integration, frozen packages and full application coverage remain unvalidated.
 
 M2 migrates old data to schema 2 on first use, retaining manual entries and marking saved AI entries as legacy/unreviewed. Legacy entries do not expire. M3 protects key-bearing configurations using disk schema 3. Update the installed component together with the tools: old components reject the new format. Development tests have not migrated daily user data, and reverting Git is not a data downgrade.
 

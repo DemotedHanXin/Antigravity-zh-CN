@@ -18,7 +18,8 @@ const bridgeAudit = {mode: 'not_installed', snapshots: 0, authorizedSnapshots: 0
 if (entry === '.dragongirl/bootstrap.cjs' && fs.existsSync(path.join(__dirname, '.dragongirl/profile.json'))) {
   const profile = JSON.parse(fs.readFileSync(path.join(__dirname, '.dragongirl/profile.json'), 'utf8'));
   const controlled = profile.id === 'm1-lab-antigravity-2.28.2-controlled';
-  if (!controlled && profile.id !== 'm1-lab-antigravity-2.28.2-navigation') throw new Error('Unexpected lab bridge');
+  if (!controlled && !['m1-lab-antigravity-2.28.2-navigation',
+    'antigravity-2.29.0-win32-x64-home-permissions'].includes(profile.id)) throw new Error('Unexpected lab bridge');
   const mode = process.env.ANTIGRAVITY_M1_TRANSLATION_TEST || 'disabled';
   if (!['disabled', 'success', 'failure'].includes(mode) || (!controlled && mode !== 'disabled')) throw new Error('Unexpected test mode');
   const runtime = require('./.dragongirl/main.cjs');

@@ -4,7 +4,7 @@
 
 为 Antigravity 桌面端提供中文界面补丁、汉化还原，以及 Windows 代理启动与快捷方式管理。命令行工具使用 Python 标准库；统一管理器需要 PySide6。
 
-本分支基于 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN) 扩展。原有翻译规则以 v2.21.1 的文件结构为基础；新增的 2.28.2 接入范围见下文，不保证所有版本的文本覆盖率。本次开发针对仓库中的 **源码**；旧版 Release 中的可执行程序需要重新打包后才包含这些改动。
+本分支基于 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN) 扩展。原有翻译规则以 v2.21.1 的文件结构为基础；新增的 2.28.2、2.29.0 接入范围见下文，不保证所有版本的文本覆盖率。本次开发针对仓库中的 **源码**；旧版 Release 中的可执行程序需要重新打包后才包含这些改动。
 
 ## Windows 管理器分阶段开发
 
@@ -25,11 +25,11 @@ python main.py --cli --help
 
 ## DragonGirl 开发版：请先了解状态
 
-**M1 已获审核通过，源码提供 Antigravity 2.28.2 / Windows x64 的限定兼容 profile：`antigravity-2.28.2-win32-x64-navigation`，未发布。** 匹配同时核对入口、preload、窗口／服务模块及外置 `language_server.exe` 的指纹，并绑定实际应用窗口与动态本地服务。
+**M1 已获审核通过；源码目前提供 Antigravity 2.28.2 和 2.29.0 / Windows x64 的精确指纹 profile，未发布。** 匹配同时核对入口、preload、窗口／服务模块及外置 `language_server.exe` 的指纹，并绑定实际应用窗口与动态本地服务。
 
-重新汉化匹配版本时，旧的广域 DOM observer 会停用，网页翻译范围缩小为根路径 `/`、无 query/hash 时的四个导航正文标签：**New Conversation、Automations、Customizations、Settings**。其他页面正文、Projects 和同名 aria-label 不在此 profile 范围内；原生菜单仍沿用静态汉化。未匹配版本保留原有同步汉化路径。
+2.28.2 profile 仅在根路径 `/`、无 query/hash 时处理 **New Conversation、Automations、Customizations、Settings** 四个导航正文标签。2.29.0 profile 在相同路由条件下增加 Projects、首页问候语、Local Checkout 和权限模式的固定标签／说明。问候语中的姓名会在请求前替换为 `{{name}}`，AI 不接收真实姓名。两者都停用旧的广域 DOM observer；聊天、项目名、对话标题、输入和其他页面不进入 AI。原生菜单仍沿用静态汉化，未匹配版本保留原有同步汉化路径。
 
-这四个标签目前都命中内置词典，正常运行不会由它们产生自然未命中的 AI 请求。隔离实测通过人为未命中和本地固定提供方验证了请求、显示、失败、关闭、导航及服务恢复链路，**没有验证真实提供方的页面补译**。仅更新仓库源码不会修改日常安装；需另行对目标安装执行汉化才会应用新 profile。
+2.28.2 的四个标签都命中内置词典，正常运行不会由它们产生自然未命中的 AI 请求。2026-11-05 在 2.29.0 日常安装上验证了真实 Gemini 连接、页面自动采集、候选持久化及首页候选译文显示；用户随后采纳了 7 条固定界面文案，个人词典中均标为「已采纳」，并拒绝了问候语候选。仅更新仓库源码不会修改日常安装；需另行对目标安装执行汉化才会应用新 profile。
 
 - 统一管理器：`python main.py`；旧 Tk 设置工具仍保留。
 - 个人词典 → 内置词典／规则 → 有效待确认译文 → AI；AI 默认关闭，原生菜单不接个人覆盖或 AI。
@@ -39,7 +39,7 @@ python main.py --cli --help
 - Windows 密钥使用当前用户 DPAPI 保护，已有明文配置在首次读取时迁移；配置/个人词典不会随汉化更新或还原删除。跨账户无法直接解密。
 - 连接测试为单独、需确认的可能计费操作，需要外部 Node；通过不表示真实应用桥接可用。
 
-完整使用方式和边界见 [DragonGirl 说明](docs/DRAGONGIRL.md)；实测证据、最新回归结果及未验证范围见 [M1 阶段记录](docs/development/M1-real-integration.md)。macOS 桥接、真实 AI 页面补译、GUI／冻结包及完整应用覆盖仍未验收。
+完整使用方式和边界见 [DragonGirl 说明](docs/DRAGONGIRL.md)；早期隔离实测见 [M1 阶段记录](docs/development/M1-real-integration.md)。2.29.0 的真实页面补译与个人词典采纳已观察到；macOS 桥接、冻结包及完整应用覆盖尚未验收。
 
 M2 首次读取旧配置时会迁移到 schema2，保留全部旧手工和历史 AI 词条；历史 AI 标为未审核，不进入过期清理。M3 将含密钥配置保护为磁盘 schema3。请同步更新应用内翻译组件，旧组件遇到新格式会暂停增强翻译。源码开发和隔离测试没有迁移日常用户数据；回退 Git 不等于数据降级。
 
