@@ -16,7 +16,7 @@ This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigra
 - Cleanup preserves shortcuts, retargets them to the EXE, then directly deletes the two launchers. Rerun Setup to enable proxy launching again.
 - Check PowerShell execution policy before deployment without changing or bypassing it. Try a personal Start Menu fallback when shared shortcuts cannot be updated, while reporting unresolved items.
 
-See [Project status and code guide](PROJECT_STATUS.md) (Chinese) for the implementation and validation scope.
+See [Project status and code guide](doc/PROJECT_STATUS.md) (Chinese) for the implementation and validation scope.
 
 ## Requirements and setup
 
@@ -26,7 +26,7 @@ See [Project status and code guide](PROJECT_STATUS.md) (Chinese) for the impleme
 | Proxy and shortcuts | Windows, Python 3.8+, built-in Windows PowerShell and WScript.Shell |
 | Validation for this revision | Windows with Python 3.11; native macOS and other app versions still need validation |
 
-Download the complete repository. Keep `antigravity_common.py` beside `Antigravity-Patcher.py` and `Restore.py`. Keep `Setup-Proxy-Shortcuts.py` beside `Cleanup-Proxy-Shortcuts.py`.
+Download the complete repository. Keep `src/antigravity_common.py` beside `src/Antigravity-Patcher.py` and `src/Restore.py`. Keep `src/Setup-Proxy-Shortcuts.py` beside `src/Cleanup-Proxy-Shortcuts.py`.
 
 ```powershell
 git clone https://github.com/DemotedHanXin/Antigravity-zh-CN.git
@@ -122,14 +122,14 @@ python -B -m unittest discover -s tests -v
 
 Tests use isolated directories and mocked process control. They cover archive validation, external dependencies, localization / restore failure handling, shortcut arguments, scan roots and backup-free proxy operations. Do not run mutation tests against a working installation.
 
-See [PROJECT_STATUS.md](PROJECT_STATUS.md) for module responsibilities, file states and maintenance notes.
+See [PROJECT_STATUS.md](doc/PROJECT_STATUS.md) for module responsibilities, file states and maintenance notes.
 
 ## Screenshot
 
 ![Antigravity Chinese UI example](antigravity-chinese.png)
 
-This example does not imply complete translation of every version or generated content. Add translations to the dictionary in `Antigravity-Patcher.py`, then reapply the patch.
+This example does not imply complete translation of every version or generated content. Add translations to the dictionary in `src/Antigravity-Patcher.py`, then reapply the patch.
 
 ## Contributing and license
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and the [MIT License](LICENSE). Report issues in [this fork](https://github.com/DemotedHanXin/Antigravity-zh-CN/issues). Original project: [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN).
+See [CONTRIBUTING.md](doc/CONTRIBUTING.md) and the [MIT License](LICENSE). Report issues in [this fork](https://github.com/DemotedHanXin/Antigravity-zh-CN/issues). Original project: [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN).

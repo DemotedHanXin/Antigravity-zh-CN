@@ -7,7 +7,7 @@ import sys
 import tempfile
 
 from antigravity_common import (
-    discover_install, extract_asar, launch_application, remove_tree,
+    discover_install, extract_asar, remove_tree,
     resources_dir, stop_application, validate_extracted_app,
 )
 
@@ -918,7 +918,8 @@ def _stamp(path):
     return info.st_size, info.st_mtime_ns, info.st_ino
 
 
-def apply_patch(app_dir=None, no_launch=False):
+def apply_patch(app_dir=None, no_launch=True):
+    """Apply localization without launching; no_launch is kept for compatibility."""
     root = discover_install(app_dir)
     resources = resources_dir(root)
     archive = resources / 'app.asar'
@@ -1026,18 +1027,17 @@ def apply_patch(app_dir=None, no_launch=False):
         except (OSError, ValueError) as error:
             raise RuntimeError('汉化已生效，但旧工作目录未清理完成：' + str(previous) + '；' + str(error))
     print('[完成] 汉化文件与主入口校验通过；原始归档保留为 app.asar.disabled，用于还原。')
-    if not no_launch:
-        launch_application(root)
+    print('[提示] 本次运行不会自动启动 Antigravity；需要使用时请手动打开软件。')
     return True
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='安全汉化 Antigravity：完整校验归档与依赖后切换，失败保留原始程序。')
     parser.add_argument('--app-dir', help='安装目录；macOS 指定 Antigravity.app')
-    parser.add_argument('--no-launch', action='store_true', help='完成后不自动启动软件')
+    parser.add_argument('--no-launch', action='store_true', help='兼容旧命令；脚本始终不自动启动软件')
     args = parser.parse_args(argv)
     try:
-        apply_patch(args.app_dir, args.no_launch)
+        apply_patch(args.app_dir)
         return 0
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         print('[错误] ' + str(error))

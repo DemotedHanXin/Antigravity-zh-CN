@@ -1,6 +1,6 @@
 # 项目状态与代码说明
 
-更新日期：2026-10-26。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次修复。日常使用命令见 [README.md](README.md)，英文说明见 [README_EN.md](README_EN.md)。
+更新日期：2026-10-26。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次修复。日常使用命令见 [README.md](../README.md)，英文说明见 [README_EN.md](../README_EN.md)。
 
 ## 1. 项目当前负责什么
 
@@ -30,14 +30,14 @@
 
 | 文件 | 职责与主要入口 |
 | --- | --- |
-| [Antigravity-Patcher.py](Antigravity-Patcher.py) | 翻译词典、DOM/菜单注入代码，以及 `apply_patch()` 汉化流程；`main()` 解析 CLI |
-| [Restore.py](Restore.py) | `restore()` 验证原版归档、切换应用状态、清除汉化目录；`main()` 处理 CLI 和失败状态 |
-| [antigravity_common.py](antigravity_common.py) | 安装目录发现、ASAR 校验/提取、入口验证、受限范围删除，以及目标安装的进程控制 |
-| [Setup-Proxy-Shortcuts.py](Setup-Proxy-Shortcuts.py) | 启动器模板、Windows 快捷方式 COM 桥接、扫描、策略检查、目录元数据与 `install()` |
-| [Cleanup-Proxy-Shortcuts.py](Cleanup-Proxy-Shortcuts.py) | 加载同目录 Setup 工具函数；`plan_cleanup()` 计划修改，`apply_cleanup()` 改回 EXE 后删除启动器 |
-| [tests](tests) | 隔离样例与回归测试，不以真实安装作为写入目标 |
+| [Antigravity-Patcher.py](../src/Antigravity-Patcher.py) | 翻译词典、DOM/菜单注入代码，以及 `apply_patch()` 汉化流程；`main()` 解析 CLI |
+| [Restore.py](../src/Restore.py) | `restore()` 验证原版归档、切换应用状态、清除汉化目录；`main()` 处理 CLI 和失败状态 |
+| [antigravity_common.py](../src/antigravity_common.py) | 安装目录发现、ASAR 校验/提取、入口验证、受限范围删除，以及目标安装的进程控制 |
+| [Setup-Proxy-Shortcuts.py](../src/Setup-Proxy-Shortcuts.py) | 启动器模板、Windows 快捷方式 COM 桥接、扫描、策略检查、目录元数据与 `install()` |
+| [Cleanup-Proxy-Shortcuts.py](../src/Cleanup-Proxy-Shortcuts.py) | 加载同目录 Setup 工具函数；`plan_cleanup()` 计划修改，`apply_cleanup()` 改回 EXE 后删除启动器 |
+| [tests](../tests) | 隔离样例与回归测试，不以真实安装作为写入目标 |
 
-汉化和还原通过普通 Python 导入共享模块，因此分发源码时必须包含 `antigravity_common.py`。Cleanup 使用 `runpy.run_path()` 读取同目录 Setup 的定义，不会执行它的命令行入口。
+汉化和还原通过普通 Python 导入共享模块，因此分发源码时必须包含 `../src/antigravity_common.py`。Cleanup 使用 `runpy.run_path()` 读取同目录 Setup 的定义，不会执行它的命令行入口。
 
 ### 公共模块的关键函数
 
@@ -126,7 +126,7 @@
 | Setup / Cleanup | `--scan-root` | 额外扫描快捷方式目录，可重复使用 |
 | Setup / Cleanup | `--dry-run` | 预览，不创建、修改或删除安装文件及快捷方式 |
 
-两条恢复操作的用途不同：`Restore.py` 恢复英文界面；`Cleanup-Proxy-Shortcuts.py` 退出代理启动方式。后者不操作汉化归档，前者不清理代理快捷方式。
+两条恢复操作的用途不同：`../src/Restore.py` 恢复英文界面；`src/Cleanup-Proxy-Shortcuts.py` 退出代理启动方式。后者不操作汉化归档，前者不清理代理快捷方式。
 
 ## 6. 验证方式与当前边界
 

@@ -16,7 +16,7 @@
 - **清理保留快捷方式**：先将匹配入口改回 EXE，再直接删除两个代理启动文件；需要代理时重新运行 Setup。
 - **启动条件检查**：代理配置前检查 PowerShell 执行策略；不修改全局策略，也不绕过组织策略。公共开始菜单写入失败时，尝试创建个人入口并报告未处理项。
 
-实现细节、状态转换、文件用途和验证范围见 [项目状态与代码说明](PROJECT_STATUS.md)。
+实现细节、状态转换、文件用途和验证范围见 [项目状态与代码说明](doc/PROJECT_STATUS.md)。
 
 ## 运行条件与准备
 
@@ -26,7 +26,7 @@
 | 代理启动与快捷方式 | Windows、Python 3.8+、系统自带 Windows PowerShell 与 WScript.Shell |
 | 本次验证环境 | Windows、Python 3.11；macOS 和其他 Antigravity 版本仍需实际验证 |
 
-下载完整仓库，保留脚本依赖：`Antigravity-Patcher.py`、`Restore.py` 依赖同目录的 `antigravity_common.py`；`Cleanup-Proxy-Shortcuts.py` 依赖同目录的 `Setup-Proxy-Shortcuts.py`。
+下载完整仓库，保留脚本依赖：`src/Antigravity-Patcher.py`、`src/Restore.py` 依赖同目录的 `src/antigravity_common.py`；`src/Cleanup-Proxy-Shortcuts.py` 依赖同目录的 `src/Setup-Proxy-Shortcuts.py`。
 
 ```powershell
 git clone https://github.com/DemotedHanXin/Antigravity-zh-CN.git
@@ -127,14 +127,14 @@ python -B -m unittest discover -s tests -v
 
 测试使用隔离目录及模拟的进程控制，覆盖归档校验、外置依赖、汉化／还原失败保护、快捷方式参数、扫描目录和不产生代理备份等行为，不应直接对正在使用的安装运行变更测试。
 
-更详细的模块入口、文件状态和维护说明见 [PROJECT_STATUS.md](PROJECT_STATUS.md)。
+更详细的模块入口、文件状态和维护说明见 [PROJECT_STATUS.md](doc/PROJECT_STATUS.md)。
 
 ## 界面示例
 
 ![Antigravity 中文界面示例](antigravity-chinese.png)
 
-示例不代表所有版本、动态内容或模型输出均已翻译。新增词条可修改 `Antigravity-Patcher.py` 中的翻译字典，再运行汉化脚本。
+示例不代表所有版本、动态内容或模型输出均已翻译。新增词条可修改 `src/Antigravity-Patcher.py` 中的翻译字典，再运行汉化脚本。
 
 ## 贡献与许可
 
-参阅 [贡献指南](CONTRIBUTING.md) 和 [MIT License](LICENSE)。问题可提交到 [本分支 Issues](https://github.com/DemotedHanXin/Antigravity-zh-CN/issues)。上游项目为 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN)。
+参阅 [贡献指南](doc/CONTRIBUTING.md) 和 [MIT License](LICENSE)。问题可提交到 [本分支 Issues](https://github.com/DemotedHanXin/Antigravity-zh-CN/issues)。上游项目为 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN)。

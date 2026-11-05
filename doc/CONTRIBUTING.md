@@ -21,7 +21,7 @@
 发现翻译错误或不恰当的地方？
 
 1. Fork 本仓库
-2. 在 `Antigravity-Patcher.py` 中找到 `dictionary` 字典
+2. 在 `../src/Antigravity-Patcher.py` 中找到 `dictionary` 字典
 3. 修改或添加翻译条目
 4. 测试您的修改
 5. 提交 Pull Request，说明修改的原因

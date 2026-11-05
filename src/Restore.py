@@ -8,7 +8,6 @@ import uuid
 
 from antigravity_common import (
     discover_install,
-    launch_application,
     remove_tree,
     resources_dir,
     stop_application,
@@ -44,9 +43,10 @@ def _app_snapshot(path, parent):
     return _check_app_directory(path, parent) if _exists(path) else None
 
 
-def restore(app_dir=None, launch=True):
+def restore(app_dir=None, launch=False):
     """Return 0 on completion and 2 if original code is restored but cleanup fails.
 
+    Never launch the application; launch is kept for compatibility only.
     Validation and commit failures raise before any success message. The caller
     must never discard a quarantined directory if a rollback also fails.
     """
@@ -75,6 +75,7 @@ def restore(app_dir=None, launch=True):
     needs_activation = source == disabled
     if not has_app and not needs_activation:
         print('[完成] 原版归档及主入口校验通过，没有汉化工作目录需要清理。')
+        print('[提示] 本次运行不会自动启动 Antigravity；需要使用时请手动打开软件。')
         return 0
 
     print('[执行] 正在关闭该安装目录下的 Antigravity...')
@@ -121,21 +122,17 @@ def restore(app_dir=None, launch=True):
             return 2
 
     print('[完成] 已恢复原版归档并清除汉化工作目录；代理启动文件和快捷方式保持不变。')
-    if launch:
-        try:
-            launch_application(root)
-        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
-            raise RuntimeError('安装文件已还原，但自动启动未完成：' + str(error)) from error
+    print('[提示] 本次运行不会自动启动 Antigravity；需要使用时请手动打开软件。')
     return 0
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='校验官方归档后安全还原 Antigravity，保留唯一可运行的代码。')
     parser.add_argument('--app-dir', help='Antigravity 安装目录；macOS 使用 Antigravity.app 路径')
-    parser.add_argument('--no-launch', action='store_true', help='还原完成后不自动启动软件')
+    parser.add_argument('--no-launch', action='store_true', help='兼容旧命令；脚本始终不自动启动软件')
     args = parser.parse_args(argv)
     try:
-        return restore(args.app_dir, launch=not args.no_launch)
+        return restore(args.app_dir)
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         print('[错误] ' + str(error))
         return 1

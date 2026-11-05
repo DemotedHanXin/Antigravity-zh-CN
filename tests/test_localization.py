@@ -11,8 +11,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-import antigravity_common as common
-
+from src import antigravity_common as common
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location('patcher', ROOT / 'Antigravity-Patcher.py')
