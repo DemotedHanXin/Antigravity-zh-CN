@@ -2,15 +2,17 @@
 
 日期：2026-11-05（Asia/Shanghai）。分支：`feat/DragonGirl`；起点：M2 提交 `3562929`。用户已确认 M2 结束并要求按计划继续，授权进入 M3。本阶段实现及完整回归完成，待用户审核；原生界面及真实 API 联调仍由用户手动执行。本地交审标签：`manager-v0.1.0-m3-review.1`。
 
+2026-11-05 后续目录整理：按用户要求将管理器与 JavaScript 运行时移入 `src/`，新增根目录 `main.py` 统一入口；本文的启动命令和源码路径已同步到当前工作区。上面的审核标签及下方原有回归计数描述 M3 原交付快照，不包含此次整理。整理后 Python 完整回归为 268 项（264 通过、4 跳过），其中目录与入口专项 7 项通过。JavaScript 完整套件在沙箱中为 189 通过、2 跳过、10 项本机网络受限失败；获工具批准后在沙箱外重跑网络专项 18 项全部通过，合并覆盖为 199 通过、2 跳过，不是单次完整套件全通过。未执行原生 GUI 或真实外部 API 验收，M4 仍未开始。
+
 ## 1. 阶段目标及实际完成内容
 
-新增源码入口 `python -m antigravity_manager`，使用 PySide6 提供概览、词典管理、待确认译文、AI 设置、代理与启动说明、日志与诊断六页。支持选择安装、检查兼容／组件、应用汉化、还原和独立启动；词典搜索、覆盖、恢复默认、JSON 导入导出；候选编辑采纳、拒绝、解除及到期显示；四类协议、请求限制、密钥更新／清除及显式固定文案测试。
+新增源码入口 `python main.py`，使用 PySide6 提供概览、词典管理、待确认译文、AI 设置、代理与启动说明、日志与诊断六页。支持选择安装、检查兼容／组件、应用汉化、还原和独立启动；词典搜索、覆盖、恢复默认、JSON 导入导出；候选编辑采纳、拒绝、解除及到期显示；四类协议、请求限制、密钥更新／清除及显式固定文案测试。
 
 代理页当前仅说明 M4 范围，实际快捷方式扫描、预览、启用／移除以及 PyInstaller／Inno Setup 均留给 M4。没有提前构建或发布安装包，没有改动日常安装、系统代理或真实用户配置。
 
 ## 2. 主要实现、接口与数据变化
 
-- `antigravity_manager/service.py` 为 GUI 和 JSON CLI 共用服务。配置响应只提供地址、模型和 `hasKey`；保存时只更新明确提供的密钥，留空保留、明确清除才删除。诊断记录时间、固定操作名、结果代码及白名单中的安装步骤／状态，不保存参数、密钥、原文或 API 正文。
+- `src/antigravity_manager/service.py` 为 GUI 和 JSON CLI 共用服务。配置响应只提供地址、模型和 `hasKey`；保存时只更新明确提供的密钥，留空保留、明确清除才删除。诊断记录时间、固定操作名、结果代码及白名单中的安装步骤／状态，不保存参数、密钥、原文或 API 正文。
 - `installation_service.py` 返回目标安装、逐项步骤、错误码、文件是否变化及重启提示。原汉化／还原 CLI 增加 `--json`；原函数通过日志／事件回调复用，不解析中文输出判断成功。保留原有校验、暂存、切换、回滚和保留恢复源行为。
 - 安装兼容来源于原版归档与受审核 profile 的指纹；磁盘组件另核对注入和运行时完整性。安装成功不等于运行连接成功；没有握手证据时 `running/runtime` 为 `unknown`。API 测试状态仅对应当前保存版本，配置变化后失效。
 - 所有文件、安装、清理和网络任务通过单个后台 QThread 串行执行，期间禁用冲突控件。关闭窗口等待当前操作完成；任务失败时保留窗口与错误。定时清理不覆盖编辑草稿；旧版本写入报冲突，需要用户刷新。
@@ -58,10 +60,10 @@ git diff --check
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-manager.txt
-.\.venv\Scripts\python.exe -m antigravity_manager --data-dir .m3-lab/review
+.\.venv\Scripts\python.exe main.py --data-dir .m3-lab/review
 # 不使用 Qt 的结构化入口：
-.\.venv\Scripts\python.exe -m antigravity_manager.cli --data-dir .m3-lab/review config
-.\.venv\Scripts\python.exe -m antigravity_manager.cli --app-dir .m1-lab/install status
+.\.venv\Scripts\python.exe main.py --cli --data-dir .m3-lab/review config
+.\.venv\Scripts\python.exe main.py --cli --app-dir .m1-lab/install status
 ```
 
 省略 `--data-dir` 使用日常用户目录，首次读取可能迁移已有密钥；首次审核建议保留上述独立目录。界面不会自动汉化、启动应用或测试 API。汉化／还原必须明确目标并确认保存工作，操作完成后不自动启动。API 测试需要 Node 及完整运行时资源，确认后使用已保存配置及固定测试文案，可能产生费用。

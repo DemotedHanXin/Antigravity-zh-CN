@@ -51,7 +51,7 @@ function harness(entry = 'dist/main.js', candidate = false, mode = 'disabled') {
     if (name === './m1-ui-audit.cjs') return audit;
     if (name === './m1-service-control.cjs') return {createServiceControl: options => createServiceControl({...options, fs:fakeFs, newSessionId:()=> 'b'.repeat(32)})};
     if (name === './dist/languageServer.js') return ls;
-    if (name === './.dragongirl/storage.cjs') return require('../../localization_runtime/storage.cjs');
+    if (name === './.dragongirl/storage.cjs') return require('../../src/localization_runtime/storage.cjs');
     if (name === './.dragongirl/main.cjs') return {createService(options) {
       serviceOptions = options; harnessService = {snapshot: async () => ({enabled: false})}; return harnessService;
     }, installIpc() {}};
@@ -201,7 +201,7 @@ test('navigation candidate uses a disabled memory store and rejects provider cal
 });
 
 test('controlled modes exercise the real service without disk configuration or network', async () => {
-  const {createService} = require('../../localization_runtime/main.cjs');
+  const {createService} = require('../../src/localization_runtime/main.cjs');
   for (const mode of ['success', 'failure', 'disabled']) {
     const h = harness('.dragongirl/bootstrap.cjs', 'controlled', mode);
     const service = createService(h.serviceOptions);

@@ -1,6 +1,6 @@
 # Antigravity-zh-CN
 
-[English](README_EN.md) | 简体中文
+[English](docs/README_EN.md) | 简体中文
 
 为 Antigravity 桌面端提供中文界面补丁、汉化还原，以及 Windows 代理启动与快捷方式管理。命令行工具使用 Python 标准库；统一管理器需要 PySide6。
 
@@ -16,9 +16,11 @@
 
 ```powershell
 python -m pip install -r requirements-manager.txt
-python -m antigravity_manager
+python main.py
 # 首次审核建议用独立数据目录；不会自动汉化、启动应用或测试 API
-python -m antigravity_manager --data-dir .m3-lab/review
+python main.py --data-dir .m3-lab/review
+# 无界面命令行入口
+python main.py --cli --help
 ```
 
 ## DragonGirl 开发版：请先了解状态
@@ -29,10 +31,10 @@ python -m antigravity_manager --data-dir .m3-lab/review
 
 这四个标签目前都命中内置词典，正常运行不会由它们产生自然未命中的 AI 请求。隔离实测通过人为未命中和本地固定提供方验证了请求、显示、失败、关闭、导航及服务恢复链路，**没有验证真实提供方的页面补译**。仅更新仓库源码不会修改日常安装；需另行对目标安装执行汉化才会应用新 profile。
 
-- 统一管理器：`python -m antigravity_manager`；旧 Tk 设置工具仍保留。
+- 统一管理器：`python main.py`；旧 Tk 设置工具仍保留。
 - 个人词典 → 内置词典／规则 → 有效待确认译文 → AI；AI 默认关闭，原生菜单不接个人覆盖或 AI。
 - 新 AI 结果统一进入独立候选，首次生成后保留 7 天、复用不续期；采纳后才进入个人词典，拒绝持续抑制直到解除。
-- 词典／审核 CLI：`python src/localization/Translation-Dictionary.py --help`；内置数据在 `localization_runtime/builtin-dictionary.json`，正则逻辑仍由代码维护。
+- 词典／审核 CLI：`python src/localization/Translation-Dictionary.py --help`；内置数据在 `src/localization_runtime/builtin-dictionary.json`，正则逻辑仍由代码维护。
 - OpenAI Responses、Gemini generateContent、Claude Messages 及自定义 OpenAI 兼容 Chat Completions 四种协议。
 - Windows 密钥使用当前用户 DPAPI 保护，已有明文配置在首次读取时迁移；配置/个人词典不会随汉化更新或还原删除。跨账户无法直接解密。
 - 连接测试为单独、需确认的可能计费操作，需要外部 Node；通过不表示真实应用桥接可用。
@@ -51,29 +53,28 @@ M2 首次读取旧配置时会迁移到 schema2，保留全部旧手工和历史
 - **清理保留快捷方式**：先将匹配入口改回 EXE，再直接删除两个代理启动文件；需要代理时重新运行 Setup。
 - **启动条件检查**：代理配置前检查 PowerShell 执行策略；不修改全局策略，也不绕过组织策略。公共开始菜单写入失败时，尝试创建个人入口并报告未处理项。
 
-实现细节、状态转换、文件用途和验证范围见 [项目状态与代码说明](PROJECT_STATUS.md)。
+实现细节、状态转换、文件用途和验证范围见 [项目状态与代码说明](docs/PROJECT_STATUS.md)。
 
 ## 目录结构
 
 ```text
+README.md                             # 项目首页与启动说明
+main.py                               # 统一启动入口：GUI / --cli
 src/
-├── localization/                     # 原作者汉化、还原及相关扩展
-│   ├── Antigravity-Patcher.py
-│   ├── Restore.py
-│   ├── antigravity_common.py
-│   ├── Translation-Settings.py
-│   ├── translation_config.py
-│   ├── translation_integration.py
-│   └── Inspect-Translation-Compatibility.py
-└── proxy/                            # 本分支的代理与快捷方式工具
-    ├── Setup-Proxy-Shortcuts.py
-    └── Cleanup-Proxy-Shortcuts.py
-localization_runtime/                 # JavaScript 运行时与兼容注册表
-tests/                                # Python / JavaScript 隔离测试
-docs/                                 # DragonGirl 使用与验证说明
+├── antigravity_manager/               # 管理界面、后台任务与服务调度
+├── localization/                      # 汉化、还原、配置及词典服务
+├── localization_runtime/              # JavaScript 运行时、词典与兼容规则
+└── proxy/                             # Windows 代理启动与快捷方式工具
+tests/                                # Python / JavaScript 测试和实验工具
+docs/                                 # 除首页外的全部项目 Markdown 文档
+├── README_EN.md                       # 英文使用说明
+├── PROJECT_STATUS.md                  # 源码职责与状态说明
+├── CONTRIBUTING.md                    # 贡献指南
+├── development/                       # 阶段计划、进度与交付记录
+└── testing/                           # 测试夹具与手动验证说明
 ```
 
-下文命令均从仓库根目录执行。Python 入口已迁入 `src`；从其他工作目录运行时，请使用入口脚本的完整路径。
+下文命令均从仓库根目录执行。日常启动使用 `main.py`，功能源码按类别集中在 `src/`；从其他工作目录运行时，使用入口脚本的完整路径。根目录还保留依赖清单 `requirements-manager.txt`、`LICENSE` 和 Git 配置，测试及本地环境保持独立。
 
 ## 运行条件与准备
 
@@ -84,7 +85,7 @@ docs/                                 # DragonGirl 使用与验证说明
 | 原有修复记录 | 历史 Windows/Python 3.11 验证见 PROJECT_STATUS；不代表 DragonGirl 真机验证 |
 | DragonGirl 开发测试 | Python、Node 22+；隔离模拟不等于真实应用兼容 |
 
-下载完整仓库并保留上述目录结构。汉化、还原、设置 GUI 和兼容检查工具通过同目录模块导入依赖；运行时资源按源码位置查找仓库根目录的 `localization_runtime/`，不依赖当前工作目录。Cleanup 从自身所在目录加载 Setup，两个代理脚本应一起保留。
+下载完整仓库并保留上述目录结构。汉化、还原、设置 GUI 和兼容检查工具通过同目录模块导入依赖；运行时资源按源码位置查找仓库根目录的 `src/localization_runtime/`，不依赖当前工作目录。Cleanup 从自身所在目录加载 Setup，两个代理脚本应一起保留。
 
 ```powershell
 git clone https://github.com/DemotedHanXin/Antigravity-zh-CN.git
@@ -188,14 +189,8 @@ node --test tests/js/*.test.cjs
 
 测试使用隔离目录及模拟的进程控制，覆盖归档校验、外置依赖、汉化／还原失败保护、快捷方式参数、扫描目录和不产生代理备份等行为，不应直接对正在使用的安装运行变更测试。
 
-更详细的模块入口、文件状态和维护说明见 [PROJECT_STATUS.md](PROJECT_STATUS.md)。
-
-## 界面示例
-
-![Antigravity 中文界面示例](antigravity-chinese.png)
-
-这是历史界面示例，不代表 M1 的覆盖范围或所有版本、动态内容、模型输出均已翻译。内置数据在 `localization_runtime/builtin-dictionary.json`，个人修改通过词典工具保存为覆盖；匹配 profile 时仍受四个固定导航标签的范围限制，扩大范围需要另行验证兼容配置。
+更详细的模块入口、文件状态和维护说明见 [PROJECT_STATUS.md](docs/PROJECT_STATUS.md)。
 
 ## 贡献与许可
 
-参阅 [贡献指南](CONTRIBUTING.md) 和 [MIT License](LICENSE)。问题可提交到 [本分支 Issues](https://github.com/DemotedHanXin/Antigravity-zh-CN/issues)。上游项目为 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN)。
+参阅 [贡献指南](docs/CONTRIBUTING.md) 和 [MIT License](LICENSE)。问题可提交到 [本分支 Issues](https://github.com/DemotedHanXin/Antigravity-zh-CN/issues)。上游项目为 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN)。

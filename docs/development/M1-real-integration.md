@@ -37,7 +37,7 @@
 
 ## 2. 主要实现、接口及数据格式变化
 
-正式 [兼容注册表](../../localization_runtime/compatibility.json) 固化与实测候选相同的指纹、动态绑定和四标签策略，另记录受控验证范围及证据索引。实验候选保留 `isolated-lab-only` 与逐次验收防护，其测试标记不代表正式 registry 状态。用户配置仍为 schema1；M1 不改变内置词典优先顺序、不迁移词典、不实现 7 天候选。
+正式 [兼容注册表](../../src/localization_runtime/compatibility.json) 固化与实测候选相同的指纹、动态绑定和四标签策略，另记录受控验证范围及证据索引。实验候选保留 `isolated-lab-only` 与逐次验收防护，其测试标记不代表正式 registry 状态。用户配置仍为 schema1；M1 不改变内置词典优先顺序、不迁移词典、不实现 7 天候选。
 
 最终收尾加强 DOM 内容读取边界：先检查路径、排除区域和选择器，再读取文案；扫描不能预读未授权属性；排队／在途节点和 mutation 处理也先复核许可。原文恢复保留受限例外：只比较组件此前写入的已登记槽位是否仍为本次译文，再恢复原文，不收集新候选。六组读取陷阱及生成 preload 回归通过，未为此再次安装或启动实际应用。既有实机证据来自相同四标签策略的实验候选。
 
@@ -145,7 +145,7 @@ git diff --check
 
 ## 4. 使用方式、已知问题及恢复方法
 
-第七轮归档恢复步骤见 [手动说明](../../tests/manual/README.md#第七轮原始归档恢复与隔离副本重建)。用户已完成 Restore→Patcher→helper reset；归档切换、内容／入口／依赖、哈希及解包重建均复核通过。当前已恢复 `resources/app`，可以继续用隔离包装器 `launch --allow-login --refresh-package --duration 1800` 启动。现有助手无法直接启动纯归档布局，因此这次重建后的启动不能替代纯 app.asar 布局启动验收；用户数据目录不参与安装布局操作。
+第七轮归档恢复步骤见 [手动说明](../testing/manual.md#第七轮原始归档恢复与隔离副本重建)。用户已完成 Restore→Patcher→helper reset；归档切换、内容／入口／依赖、哈希及解包重建均复核通过。当前已恢复 `resources/app`，可以继续用隔离包装器 `launch --allow-login --refresh-package --duration 1800` 启动。现有助手无法直接启动纯归档布局，因此这次重建后的启动不能替代纯 app.asar 布局启动验收；用户数据目录不参与安装布局操作。
 
 2026-11-03（Asia/Shanghai）还原验证遇到启动器缺陷：用户 `reset` 已完成，随后带 `--refresh-package` 启动时因旧 `launch-package.json` 的 `.dragongirl/bootstrap.cjs` 已移除而报 WinError 3。只读核对当前 package.main 已为 `dist/main.js`，入口文件存在，launch.lock 不存在；失败发生在启动子进程之前。根因是刷新流程先验证旧入口存在，无法处理合法的组件移除。
 
@@ -153,7 +153,7 @@ git diff --check
 
 failure 模式首次启动被遗留 `launch.lock` 阻止，尚未运行该验证。已只读核实宿主进程列表：锁记录的启动器 PID 137148、隔离应用 PID 107280 均不存在，亦未发现 Antigravity／language_server 进程；再次核对锁内容未变化后，仅把该锁归档到实验 evidence 目录，未启动或关闭应用。工具现明确提示先退出旧启动器，进程核实后才能处理遗留锁，不自动删除或抢占锁。
 
-按照 [用户手动操作说明](../../tests/manual/README.md#本轮用户操作主界面结构采样) 操作。用户已要求今后所有实际应用启动、界面查看和真实 API 联调由自己完成；助手仅提供步骤和处理结果，继续做代码与无界面测试。
+按照 [用户手动操作说明](../testing/manual.md#本轮用户操作主界面结构采样) 操作。用户已要求今后所有实际应用启动、界面查看和真实 API 联调由自己完成；助手仅提供步骤和处理结果，继续做代码与无界面测试。
 
 当前日常设置目录是 `%APPDATA%\Antigravity-zh-CN`；隔离副本的对应目录是 `.m1-lab/roaming/Antigravity-zh-CN`。目前不复制密钥、不要求重复配置；这一轮结构采样不会调用 AI。旧“自动保存”开关也不代表已实现 M2 的人工审核候选功能。
 
@@ -170,6 +170,7 @@ failure 模式首次启动被遗留 `launch.lock` 阻止，尚未运行该验证
 
 ```powershell
 git show --stat manager-v0.1.0-m1-review.1
+# 以下比较历史标签，因此保留当时的目录路径。
 git diff manager-v0.1.0-m0-review.1 manager-v0.1.0-m1-review.1 -- localization_runtime src/localization tests docs README.md README_EN.md PROJECT_STATUS.md .gitignore
 git cat-file -t manager-v0.1.0-m1-review.1
 git rev-parse 'manager-v0.1.0-m1-review.1^{commit}'

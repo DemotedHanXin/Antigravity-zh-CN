@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs/promises');const os=require('node:os');const path=require('node:path');const {EventEmitter}=require('node:events');
-const P=require('../../localization_runtime/providers.cjs');const S=require('../credential_fixture.cjs');const M=require('../../localization_runtime/main.cjs');const {probe}=require('../../localization_runtime/probe.cjs');
+const P=require('../../src/localization_runtime/providers.cjs');const S=require('../credential_fixture.cjs');const M=require('../../src/localization_runtime/main.cjs');const {probe}=require('../../src/localization_runtime/probe.cjs');
 const items=[{id:'one',text:'Open settings',safeContextKind:'settings'}];
 const profile={baseUrl:'https://api.example.com/v1',apiKey:'fake-test-key',model:'test-model'};
 const translated=JSON.stringify([{id:'one',text:'打开设置'}]);

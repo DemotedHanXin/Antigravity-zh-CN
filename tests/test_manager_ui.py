@@ -11,7 +11,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from source_paths import ROOT
 os.environ['QT_QPA_PLATFORM'] = 'offscreen'
 QT_AVAILABLE = importlib.util.find_spec('PySide6') is not None
 if QT_AVAILABLE:
@@ -282,7 +282,7 @@ class ManagerUITests(unittest.TestCase):
 
     def test_real_service_roundtrip_uses_only_isolated_state(self):
         from antigravity_manager.service import ManagerService
-        test_root = Path(__file__).resolve().parents[1] / '.m3-lab-ui-tests'
+        test_root = ROOT / '.m3-lab-ui-tests'
         test_root.mkdir(exist_ok=True)
         with tempfile.TemporaryDirectory(dir=test_root) as directory:
             self.window.service = ManagerService(data_dir=Path(directory) / 'data')

@@ -135,7 +135,7 @@ print(json.dumps([len(entries), entries['Save']]))
 
     def test_legacy_and_verified_injections_retain_dictionary_and_rule_hooks(self):
         patcher = load_patcher()
-        profile = json.loads((ROOT / 'localization_runtime/compatibility.json').read_text(encoding='utf-8'))['profiles'][0]
+        profile = json.loads((ROOT / 'src' / 'localization_runtime/compatibility.json').read_text(encoding='utf-8'))['profiles'][0]
         legacy = patcher.build_dom_injection()
         reviewed = patcher.build_dom_injection(profile)
         for source in (legacy, reviewed):

@@ -1,14 +1,14 @@
 # 项目状态与代码说明
 
-更新日期：2026-11-05（Asia/Shanghai）。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次改动。日常使用命令见 [README.md](README.md)，英文说明见 [README_EN.md](README_EN.md)。
+更新日期：2026-11-05（Asia/Shanghai）。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次改动。日常使用命令见 [README.md](../README.md)，英文说明见 [README_EN.md](README_EN.md)。
 
-Windows 管理器开发已建立 [M0 基线与开发约定](docs/development/M0-baseline.md) 和 [阶段进度](docs/development/PROGRESS.md)：固定在 `feat/DragonGirl` 开发，每阶段记录、提交、打附注标签并等待用户审核。M0–M2 已获批准，M3 已完成、待审核。接入实测见 [M1 记录](docs/development/M1-real-integration.md)，当前回归和交审状态见 [M3 记录](docs/development/M3-unified-manager.md)；历史计数保留各自日期语境。
+Windows 管理器开发已建立 [M0 基线与开发约定](development/M0-baseline.md) 和 [阶段进度](development/PROGRESS.md)：固定在 `feat/DragonGirl` 开发，每阶段记录、提交、打附注标签并等待用户审核。M0–M2 已获批准，M3 已完成、待审核。接入实测见 [M1 记录](development/M1-real-integration.md)，当前回归和交审状态见 [M3 记录](development/M3-unified-manager.md)；历史计数保留各自日期语境。
 
 ## 0. DragonGirl 开发版增量与验证边界
 
 本节描述 `feat/DragonGirl` 的新增组件；后文原有修复记录中的历史测试数量、Windows 版本和官方应用样本信息不是此次新增功能的执行结果。
 
-新增独立 `src/localization/Translation-Settings.py` / `src/localization/translation_config.py` 管理用户配置和个人词典，`localization_runtime/` 提供安全 DOM 管线、主进程 IPC、队列/缓存、四类 API 适配器及显式连接测试；`src/localization/translation_integration.py` 将桥接注入限制在已审核的应用指纹 profile 中。`src/localization/Inspect-Translation-Compatibility.py` 只读检查已解包副本，不会启用 AI。
+新增独立 `src/localization/Translation-Settings.py` / `src/localization/translation_config.py` 管理用户配置和个人词典，`src/localization_runtime/` 提供安全 DOM 管线、主进程 IPC、队列/缓存、四类 API 适配器及显式连接测试；`src/localization/translation_integration.py` 将桥接注入限制在已审核的应用指纹 profile 中。`src/localization/Inspect-Translation-Compatibility.py` 只读检查已解包副本，不会启用 AI。
 
 源码注册表包含 **`antigravity-2.28.2-win32-x64-navigation`**，范围为已验证的 Antigravity 2.28.2 / Windows x64 样本。匹配核对应用入口、preload、窗口／服务模块及外置 `resources/bin/language_server.exe` 的指纹；运行时绑定实际 Hub 窗口、服务进程与动态本地端口。版本号相同但指纹不同，也不能直接视为兼容。
 
@@ -24,7 +24,7 @@ Windows 隔离副本已实测受控未命中的成功／失败／关闭、导航
 - 现有测试的 Windows fixture 已显式模拟平台，保留生产的 Windows/macOS 安装限制；Linux 开发测试不扩展生产平台支持。
 - 新工作流定义只代表 CI 配置，不代表已在 GitHub 执行或通过；当前开发没有推送或发布。
 
-命令、数据布局、模块分发、兼容性检查与发布门槛见 [DragonGirl 使用与验证说明](docs/DRAGONGIRL.md)。本轮最终测试结果应以实际日志/提交说明为准，不沿用历史计数。
+命令、数据布局、模块分发、兼容性检查与发布门槛见 [DragonGirl 使用与验证说明](DRAGONGIRL.md)。本轮最终测试结果应以实际日志/提交说明为准，不沿用历史计数。
 
 ## 1. 项目当前负责什么
 
@@ -52,33 +52,34 @@ Windows 隔离副本已实测受控未命中的成功／失败／关闭、导航
 
 ## 2. 源码结构
 
-Python 源码集中在 `src/` 的两个目录：`localization/` 保存原作者的汉化/还原入口及共享模块、DragonGirl 扩展；`proxy/` 保存本分支新增的代理配置/清理入口。`localization_runtime/`、`tests/` 和 `docs/` 位于仓库根目录，完整目录树见 README。
+生产代码按功能集中在 `src/`：`antigravity_manager/` 保存管理器界面和任务调度；`localization/` 保存汉化、还原、配置和词典服务；`localization_runtime/` 保存 JavaScript 运行时与资源；`proxy/` 保存代理快捷方式工具。根目录 `main.py` 提供 GUI 和 `--cli` 统一入口。除首页外的项目 Markdown 文档均放在 `docs/`，自动测试和实验工具保留在 `tests/`，完整目录树见 README。
 
 | 文件 | 职责与主要入口 |
 | --- | --- |
-| [antigravity_manager](antigravity_manager/) | PySide6 管理界面、后台任务、统一配置／词典／审核／安装服务及 JSON CLI |
-| [src/localization/installation_service.py](src/localization/installation_service.py) | 共用安装检测、汉化、还原和启动；结构化步骤／状态，不解析控制台日志 |
-| [src/localization/credential_protection.py](src/localization/credential_protection.py) / [localization_runtime/credentials.cjs](localization_runtime/credentials.cjs) | Windows 当前用户 DPAPI；跨语言保护与解锁，不回退明文 |
-| [src/localization/Antigravity-Patcher.py](src/localization/Antigravity-Patcher.py) | 翻译词典、DOM/菜单注入代码，以及 `apply_patch()` 汉化流程；`main()` 解析 CLI |
-| [src/localization/Restore.py](src/localization/Restore.py) | `restore()` 验证原版归档、切换应用状态、清除汉化目录；`main()` 处理 CLI 和失败状态 |
-| [src/localization/antigravity_common.py](src/localization/antigravity_common.py) | 安装目录发现、ASAR 校验/提取、入口验证、受限范围删除，以及目标安装的进程控制 |
-| [src/localization/Translation-Settings.py](src/localization/Translation-Settings.py) | 独立 Tkinter 设置 GUI、个人词典编辑与显式连接测试 |
-| [src/localization/translation_service.py](src/localization/translation_service.py) | 不含凭据的结构化词典／审核及 JSON 导入导出接口，供 CLI 与管理器共用 |
-| [src/localization/Translation-Dictionary.py](src/localization/Translation-Dictionary.py) | 词典列表、个人覆盖、恢复默认、候选采纳／拒绝／解除和清理 CLI |
-| [src/localization/builtin_dictionary.py](src/localization/builtin_dictionary.py) | 读取并验证随包内置数据，保持源码和冻结资源定位 |
-| [src/localization/translation_config.py](src/localization/translation_config.py) | 用户数据路径、配置/词典校验、跨进程锁与原子保存 |
-| [src/localization/translation_integration.py](src/localization/translation_integration.py) | 运行时资源定位、应用指纹/profile 检查与桥接注入 |
-| [src/localization/Inspect-Translation-Compatibility.py](src/localization/Inspect-Translation-Compatibility.py) | 只读检查已解包应用副本并报告兼容 profile |
-| [src/proxy/Setup-Proxy-Shortcuts.py](src/proxy/Setup-Proxy-Shortcuts.py) | 启动器模板、Windows 快捷方式 COM 桥接、扫描、策略检查、目录元数据与 `install()` |
-| [src/proxy/Cleanup-Proxy-Shortcuts.py](src/proxy/Cleanup-Proxy-Shortcuts.py) | 加载同目录 Setup 工具函数；`plan_cleanup()` 计划修改，`apply_cleanup()` 改回 EXE 后删除启动器 |
-| [localization_runtime](localization_runtime) | JavaScript 运行时、连接测试探针与兼容注册表 |
-| [tests](tests) | 自动测试使用 fixture／mock；`tests/manual/` 仅供用户操作独立实验副本，不用于日常安装 |
+| [main.py](../main.py) | 统一启动函数；默认启动管理界面，`--cli` 转交结构化命令行入口 |
+| [antigravity_manager](../src/antigravity_manager) | PySide6 管理界面、后台任务、统一配置／词典／审核／安装服务及 JSON CLI |
+| [src/localization/installation_service.py](../src/localization/installation_service.py) | 共用安装检测、汉化、还原和启动；结构化步骤／状态，不解析控制台日志 |
+| [src/localization/credential_protection.py](../src/localization/credential_protection.py) / [src/localization_runtime/credentials.cjs](../src/localization_runtime/credentials.cjs) | Windows 当前用户 DPAPI；跨语言保护与解锁，不回退明文 |
+| [src/localization/Antigravity-Patcher.py](../src/localization/Antigravity-Patcher.py) | 翻译词典、DOM/菜单注入代码，以及 `apply_patch()` 汉化流程；`main()` 解析 CLI |
+| [src/localization/Restore.py](../src/localization/Restore.py) | `restore()` 验证原版归档、切换应用状态、清除汉化目录；`main()` 处理 CLI 和失败状态 |
+| [src/localization/antigravity_common.py](../src/localization/antigravity_common.py) | 安装目录发现、ASAR 校验/提取、入口验证、受限范围删除，以及目标安装的进程控制 |
+| [src/localization/Translation-Settings.py](../src/localization/Translation-Settings.py) | 独立 Tkinter 设置 GUI、个人词典编辑与显式连接测试 |
+| [src/localization/translation_service.py](../src/localization/translation_service.py) | 不含凭据的结构化词典／审核及 JSON 导入导出接口，供 CLI 与管理器共用 |
+| [src/localization/Translation-Dictionary.py](../src/localization/Translation-Dictionary.py) | 词典列表、个人覆盖、恢复默认、候选采纳／拒绝／解除和清理 CLI |
+| [src/localization/builtin_dictionary.py](../src/localization/builtin_dictionary.py) | 读取并验证随包内置数据，保持源码和冻结资源定位 |
+| [src/localization/translation_config.py](../src/localization/translation_config.py) | 用户数据路径、配置/词典校验、跨进程锁与原子保存 |
+| [src/localization/translation_integration.py](../src/localization/translation_integration.py) | 运行时资源定位、应用指纹/profile 检查与桥接注入 |
+| [src/localization/Inspect-Translation-Compatibility.py](../src/localization/Inspect-Translation-Compatibility.py) | 只读检查已解包应用副本并报告兼容 profile |
+| [src/proxy/Setup-Proxy-Shortcuts.py](../src/proxy/Setup-Proxy-Shortcuts.py) | 启动器模板、Windows 快捷方式 COM 桥接、扫描、策略检查、目录元数据与 `install()` |
+| [src/proxy/Cleanup-Proxy-Shortcuts.py](../src/proxy/Cleanup-Proxy-Shortcuts.py) | 加载同目录 Setup 工具函数；`plan_cleanup()` 计划修改，`apply_cleanup()` 改回 EXE 后删除启动器 |
+| [localization_runtime](../src/localization_runtime) | JavaScript 运行时、连接测试探针与兼容注册表 |
+| [tests](../tests) | 自动测试使用 fixture／mock；`tests/manual/` 仅供用户操作独立实验副本，不用于日常安装 |
 
-分发源码时保留 `src/localization/` 中的同目录模块及根目录 `localization_runtime/`。桥接和 GUI 共用 `resource_root()`：源码按 `__file__` 定位仓库根，PyInstaller 包按 `_MEIPASS` 定位资源。Cleanup 使用 `runpy.run_path()` 读取同目录 Setup 的定义，不会执行它的命令行入口。
+分发源码时保留根入口和完整 `src/` 目录。桥接和 GUI 共用 `resource_root()`：源码按 `__file__` 定位 `src/localization_runtime/`，PyInstaller 包从 `_MEIPASS/localization_runtime/` 读取资源。Cleanup 使用 `runpy.run_path()` 读取同目录 Setup 的定义，不会执行它的命令行入口。
 
-Python 测试通过 `tests/source_paths.py` 定位迁移后的模块，JavaScript preload 集成测试也从新目录加载入口。macOS 构建工作流使用 `src/localization/` 下的脚本，`--add-data` 的资源源目录和包内路径仍为 `localization_runtime`。日常命令和打包命令均从仓库根目录执行；从其他目录启动源码时使用完整脚本路径。
+Python 测试通过 `tests/source_paths.py` 定位迁移后的模块，JavaScript preload 集成测试也从新目录加载入口。macOS 构建工作流使用 `src/localization/` 下的脚本，`--add-data` 的源目录为 `src/localization_runtime`，包内路径仍为 `localization_runtime`。日常命令和打包命令均从仓库根目录执行；从其他目录启动源码时使用完整脚本路径。
 
-2026-11-01 在 Windows 完成本次整理验证：Python 129 项（127 通过、2 跳过），JavaScript 76 项（75 通过、1 跳过），无失败；另检查跨工作目录启动、源码/冻结资源路径、语法和文档链接。跳过原因及验证边界见 [验证记录](docs/DRAGONGIRL-VERIFICATION.md)。
+2026-11-01 在 Windows 完成此前目录整理验证：Python 129 项（127 通过、2 跳过），JavaScript 76 项（75 通过、1 跳过），无失败；另检查跨工作目录启动、源码/冻结资源路径、语法和文档链接。跳过原因及验证边界见 [验证记录](DRAGONGIRL-VERIFICATION.md)。
 
 ### 公共模块的关键函数
 
@@ -202,6 +203,6 @@ python -B -m unittest discover -s tests -v
 
 ## 7. 后续维护建议
 
-内置数据在 `localization_runtime/builtin-dictionary.json`，正则逻辑和注入保留在代码；个人修改不编辑内置数据。匹配 profile 时仍受四个固定导航标签限制，扩展 UI 范围须补充验证。新增归档处理逻辑放在公共模块；Windows 启动器与 COM 桥接集中在 Setup。修改涉及安装文件切换时，应先添加失败路径回归测试，再考虑正常流程。
+内置数据在 `src/localization_runtime/builtin-dictionary.json`，正则逻辑和注入保留在代码；个人修改不编辑内置数据。匹配 profile 时仍受四个固定导航标签限制，扩展 UI 范围须补充验证。新增归档处理逻辑放在公共模块；Windows 启动器与 COM 桥接集中在 Setup。修改涉及安装文件切换时，应先添加失败路径回归测试，再考虑正常流程。
 
 发布前应在目标版本的干净安装上验证：英文启动、汉化启动、核心依赖功能、还原启动、代理配置、代理清理、无效输入保护。不要仅凭单元测试通过宣称所有版本完全兼容。

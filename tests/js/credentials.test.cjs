@@ -4,10 +4,10 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 const os=require('node:os');
 const path=require('node:path');
-const S=require('../../localization_runtime/storage.cjs');
+const S=require('../../src/localization_runtime/storage.cjs');
 const {FixtureProtector}=require('../credential_fixture.cjs');
-const {WindowsProtector}=require('../../localization_runtime/credentials.cjs');
-const {probe}=require('../../localization_runtime/probe.cjs');
+const {WindowsProtector}=require('../../src/localization_runtime/credentials.cjs');
+const {probe}=require('../../src/localization_runtime/probe.cjs');
 
 async function fixture(t){
   const directory=await fs.mkdtemp(path.join(os.tmpdir(),'m3-credentials-'));
@@ -40,7 +40,7 @@ test('interrupted migration leaves only protected credential data in journal',as
 test('wrong-account or unavailable protection preserves disk and probe makes zero requests',async t=>{
   const store=await fixture(t),file=path.join(store.directory,'config.json');
   await S.atomicWrite(file,config());await store.read();const before=await fs.readFile(file);
-  store.protector.unprotect=async()=>{throw new (require('../../localization_runtime/providers.cjs').TranslationError)('credential_protection_failed');};
+  store.protector.unprotect=async()=>{throw new (require('../../src/localization_runtime/providers.cjs').TranslationError)('credential_protection_failed');};
   let calls=0;const result=await probe({store,translate:()=>{calls++;}});
   assert.equal(result.ok,false);assert.equal(calls,0);assert.deepEqual(await fs.readFile(file),before);
 });

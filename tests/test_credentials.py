@@ -120,8 +120,8 @@ class CredentialTests(unittest.TestCase):
         value = self.configuration()
         value['providers']['openai']['apiKey'] = 'isolated-密钥-123'
         saved = self.store.save_config(value)
-        script = """const {Store}=require('./localization_runtime/storage.cjs');
-        const {createService}=require('./localization_runtime/main.cjs');
+        script = """const {Store}=require('./src/localization_runtime/storage.cjs');
+        const {createService}=require('./src/localization_runtime/main.cjs');
         (async()=>{const store=new Store(process.argv[1]),state=await store.read();
         if(state.config.providers.openai.apiKey!=='isolated-密钥-123')throw Error('roundtrip');
         const service=createService({store});const snapshot=await service.snapshot();service.close();

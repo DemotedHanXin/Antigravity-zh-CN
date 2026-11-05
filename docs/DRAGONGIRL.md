@@ -37,14 +37,14 @@ Projects、同名 aria-label、其他页面正文及带 query/hash 页面均不�
 
 ```powershell
 python -m pip install -r requirements-manager.txt
-python -m antigravity_manager
+python main.py
 # 独立审核目录，避免迁移日常配置：
-python -m antigravity_manager --data-dir .m3-lab/review
+python main.py --data-dir .m3-lab/review
 ```
 
-本文中的命令均从仓库根目录执行。源码入口位于 `src/localization/`；从其他工作目录启动时使用完整脚本路径。
+本文中的命令均从仓库根目录执行。统一入口为 `main.py`，旧工具入口保留在 `src/localization/`；从其他工作目录启动时使用完整脚本路径。
 
-Windows 管理器需要 Python 3.11+、PySide6 和桌面显示环境。`python -m antigravity_manager.cli --help` 可在不导入 Qt 的情况下使用共享结构化服务；旧设置工具仍可用 `python src/localization/Translation-Settings.py` 启动。导入模块不会弹出 GUI、修改安装或发起网络请求。单纯编辑配置不要求 Node；可选连接测试需要 `node` 在 PATH 中，并保留完整 `localization_runtime/`。安装、还原、文件读写和 API 测试在后台任务中执行；任务未结束时关闭窗口会等待完成，不强制中断文件切换。
+Windows 管理器需要 Python 3.11+、PySide6 和桌面显示环境。`python main.py --cli --help` 可在不导入 Qt 的情况下使用共享结构化服务；旧设置工具仍可用 `python src/localization/Translation-Settings.py` 启动。导入模块不会弹出 GUI、修改安装或发起网络请求。单纯编辑配置不要求 Node；可选连接测试需要 `node` 在 PATH 中，并保留完整 `src/localization_runtime/`。安装、还原、文件读写和 API 测试在后台任务中执行；任务未结束时关闭窗口会等待完成，不强制中断文件切换。
 
 概览分别显示原版归档兼容、磁盘组件、AI 配置和最近一次主动 API 测试；没有运行握手时连接状态显示未知，不能把磁盘文件存在当作应用已接通。汉化／还原前确认保存工作和退出目标应用，执行后不自动启动；启动按钮是独立操作。词典编辑、配置保存和候选审核都使用显示时的版本号，发生外部修改会拒绝旧草稿覆盖，需要手动刷新。每 60 秒到期清理不会自动覆盖未保存表单。
 
@@ -54,7 +54,7 @@ Windows 管理器需要 Python 3.11+、PySide6 和桌面显示环境。`python -
 
 ```bash
 # 此命令会发起真实网络请求，可能计费；仅在明确同意且配置完成后运行。
-node localization_runtime/probe.cjs --confirm-network --revision N
+node src/localization_runtime/probe.cjs --confirm-network --revision N
 ```
 
 将 `N` 替换为您刚核对的 `config.json` 中 `revision` 整数；配置在确认后变化会拒绝请求。推荐使用 GUI，避免手工处理配置版本。命令行不要传入密钥或待翻译的工作内容。
@@ -149,22 +149,24 @@ python src/localization/Inspect-Translation-Compatibility.py /path/to/extracted-
 
 分发完整源码并保留目录结构，至少保留：
 
+- 根目录 `main.py` 和完整 `src/antigravity_manager/`，用于统一管理器；
+
 - `src/localization/Antigravity-Patcher.py`、`src/localization/Restore.py`、`src/localization/antigravity_common.py`；
-- `src/localization/translation_integration.py` 与完整 `localization_runtime/`（包括兼容注册表）；
+- `src/localization/translation_integration.py` 与完整 `src/localization_runtime/`（包括兼容注册表）；
 - `src/localization/builtin_dictionary.py`、`translation_service.py` 和 `Translation-Dictionary.py`；内置 JSON 也随整个 runtime 目录分发；
 - `src/localization/Translation-Settings.py`、`src/localization/translation_config.py`；
 - `src/localization/Inspect-Translation-Compatibility.py`；
 - 代理功能仍需 `src/proxy/Setup-Proxy-Shortcuts.py` 和同目录的 `Cleanup-Proxy-Shortcuts.py`。
 
-汉化相关 Python 模块保持在 `src/localization/` 同一目录；JavaScript 资源继续放在仓库根目录 `localization_runtime/`。源码根据脚本位置查找资源，冻结包根据 `_MEIPASS` 查找包内资源；设置 GUI 与桥接共用此定位逻辑，不依赖启动时的工作目录。用户配置和个人词典仍保存在用户数据目录。
+汉化相关 Python 模块保持在 `src/localization/`；JavaScript 资源位于同属 `src/` 的 `localization_runtime/`。源码根据脚本位置查找 `src/localization_runtime/`，冻结包根据 `_MEIPASS/localization_runtime/` 查找包内资源；设置 GUI 与桥接共用此定位逻辑，不依赖启动时的工作目录。用户配置和个人词典仍保存在用户数据目录。
 
 macOS 工作流 `.github/workflows/build-mac.yml` 为本机 Intel/arm64 分别构建，不用同一个架构解释器冒充跨架构成功。对应 `macos-15-intel` / `macos-15` runner 标签已按 [GitHub 官方 runner 文档](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) 核对（2026-10-26）。Patcher、设置 GUI 和兼容检查工具需显式带入 runtime 资源，例如：
 
 ```bash
 # 从仓库根目录、目标 macOS 架构的 Python 环境运行；PyInstaller 是打包依赖。
-python -m PyInstaller -F --add-data "localization_runtime:localization_runtime" src/localization/Antigravity-Patcher.py
-python -m PyInstaller -F --add-data "localization_runtime:localization_runtime" src/localization/Translation-Settings.py
-python -m PyInstaller -F --add-data "localization_runtime:localization_runtime" src/localization/Inspect-Translation-Compatibility.py
+python -m PyInstaller -F --add-data "src/localization_runtime:localization_runtime" src/localization/Antigravity-Patcher.py
+python -m PyInstaller -F --add-data "src/localization_runtime:localization_runtime" src/localization/Translation-Settings.py
+python -m PyInstaller -F --add-data "src/localization_runtime:localization_runtime" src/localization/Inspect-Translation-Compatibility.py
 python -m PyInstaller -F src/localization/Restore.py
 ```
 

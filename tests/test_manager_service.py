@@ -10,8 +10,6 @@ import unittest
 from unittest.mock import Mock, patch
 
 from source_paths import ROOT
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 from antigravity_manager.service import ManagerService
 from credential_fixture import UserStore
 
@@ -115,7 +113,7 @@ class ManagerServiceTests(unittest.TestCase):
         node = __import__('shutil').which('node')
         if not node:
             self.skipTest('Node required')
-        result = subprocess.run([node, str(ROOT / 'localization_runtime/probe.cjs'),
+        result = subprocess.run([node, str(ROOT / 'src' / 'localization_runtime/probe.cjs'),
                                  '--confirm-network', '--revision', '7', '--data-dir', str(self.store.directory)],
                                 capture_output=True, text=True, timeout=20)
         self.assertEqual(json.loads(result.stdout), {'ok': False, 'status': 'configuration_changed'})

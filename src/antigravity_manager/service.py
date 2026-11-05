@@ -8,13 +8,16 @@ import sys
 import threading
 from pathlib import Path
 
-SOURCE = Path(__file__).resolve().parents[1] / 'src' / 'localization'
+SOURCE = Path(__file__).resolve().parents[1] / 'localization'
 if str(SOURCE) not in sys.path:
     sys.path.insert(0, str(SOURCE))
 
-from translation_config import ConflictError, DataError, PROVIDERS, UserStore, validate_config
+from translation_config import ConflictError, PROVIDERS, UserStore, validate_config
+from translation_config import DataError as DataError
 from translation_integration import resource_root
 from translation_service import DictionaryService
+
+__all__ = ['ManagerService', 'DataError']
 
 
 def _settings_module():

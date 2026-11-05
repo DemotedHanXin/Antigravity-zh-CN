@@ -24,7 +24,7 @@ SPEC.loader.exec_module(PATCHER)
 
 class ShippedProfileTests(unittest.TestCase):
     def setUp(self):
-        self.registry = json.loads((ROOT / 'localization_runtime/compatibility.json').read_text(encoding='utf-8'))
+        self.registry = json.loads((ROOT / 'src' / 'localization_runtime/compatibility.json').read_text(encoding='utf-8'))
         self.candidate = json.loads((ROOT / 'tests/manual/antigravity-2.28.2.candidate.json').read_text(encoding='utf-8'))
 
     def test_shipped_profile_is_valid_and_explicitly_scoped(self):

@@ -353,7 +353,7 @@ class TranslationConfigTests(unittest.TestCase):
         for kind, value in fixtures:
             with self.assertRaises(config.DataError):
                 (config.validate_config if kind == 'config' else config.validate_dictionary)(value)
-        script = """const s=require('./localization_runtime/storage.cjs');let input='';
+        script = """const s=require('./src/localization_runtime/storage.cjs');let input='';
         process.stdin.on('data',v=>input+=v);process.stdin.on('end',()=>{
           const checks=JSON.parse(input).map(([kind,v])=>{try{(kind==='config'?s.validateConfig:s.validateDictionary)(v);return false;}catch{return true;}});
           process.stdout.write(JSON.stringify(checks));});"""

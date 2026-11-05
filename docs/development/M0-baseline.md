@@ -75,13 +75,13 @@ M0 建立一个可供后续开发和用户审核的共同基线：说明当前�
 | AI 持久化 | `autoSave=false` 仅会话缓存，开启后可直接写个人词典 | 持久化候选、审核操作、7 天清理、独立拒绝记录 |
 | 存储 | schemaVersion 1、revision、锁、原子替换、删除记录 | 候选版本／失效传播和无损迁移；M0 不改变 schema |
 | 运行时 | 主进程服务、受限 IPC、异步去重／限流／缓存、四类 provider、配置及词典轮询 | 真实版本、窗口和 UI 白名单验收 |
-| 兼容性 | [compatibility.json](../../localization_runtime/compatibility.json) 的 `profiles` 为空 | 2.28.2 的真实适配；不能仅填写哈希或切换开关 |
+| 兼容性 | [compatibility.json](../../src/localization_runtime/compatibility.json) 的 `profiles` 为空 | 2.28.2 的真实适配；不能仅填写哈希或切换开关 |
 | 密钥 | 当前配置为明文，GUI 有保存提示 | Windows 用户绑定保护及迁移 |
 | 汉化／还原 | 验证归档和外置依赖、暂存、切换、失败回滚 | GUI 共享服务封装及真实版本回归 |
 | 代理 | 系统 HTTP／混合代理启动器、快捷方式预览／配置／清理 | 统一图形操作和分项诊断；不能承诺修复所有打不开的问题 |
 | 构建 | 跨平台隔离测试、macOS 构建工作流 | Windows 管理器构建／安装／升级／卸载验收 |
 
-源代码说明见 [PROJECT_STATUS.md](../../PROJECT_STATUS.md)，当前设置工具边界见 [DRAGONGIRL.md](../DRAGONGIRL.md)。这些文档中现有优先级、明文存储等是当前事实；本节目标不能替代它们成为使用承诺。
+源代码说明见 [PROJECT_STATUS.md](../PROJECT_STATUS.md)，当前设置工具边界见 [DRAGONGIRL.md](../DRAGONGIRL.md)。这些文档中现有优先级、明文存储等是当前事实；本节目标不能替代它们成为使用承诺。
 
 ## 4. 目标架构与接口边界
 
@@ -152,7 +152,7 @@ Python 跳过项为 POSIX 权限测试及 Windows 符号链接权限测试；Jav
 python src/localization/Translation-Settings.py
 ```
 
-当前仍是 Tkinter 设置工具；保存 API 配置或通过连接测试不会自动接通真实 Antigravity。计划中的统一开发入口 `python -m antigravity_manager` 尚不存在，不应作为当前启动命令使用。完整现有脚本说明见 [README](../../README.md)。
+M0 当时仍使用 Tkinter 设置工具；保存 API 配置或通过连接测试不会自动接通真实 Antigravity。当时计划中的统一管理器尚未实现。当前源码的 `python main.py` 入口及使用说明见 [README](../../README.md)。
 
 当前还原入口是 `src/localization/Restore.py --no-launch`，代理入口移除由 `src/proxy/Cleanup-Proxy-Shortcuts.py` 负责；二者用途不同。恢复需先核验安装与原始归档，不能删除唯一可运行代码或把 `app.asar.disabled` 当作缓存。M0 未修改安装，因此无需执行恢复操作。
 

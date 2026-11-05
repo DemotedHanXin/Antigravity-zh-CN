@@ -21,7 +21,7 @@
 发现翻译错误或不恰当的地方？
 
 1. Fork 本仓库
-2. 在 `src/localization/Antigravity-Patcher.py` 中找到 `dictionary` 字典
+2. 在 `src/localization_runtime/builtin-dictionary.json` 中找到对应的内置词条；个人使用请优先通过管理器保存个人覆盖
 3. 修改或添加翻译条目
 4. 测试您的修改
 5. 提交 Pull Request，说明修改的原因
@@ -36,8 +36,8 @@
 
 ### 代码规范
 
-- 汉化、还原及 DragonGirl 的 Python 代码放在 `src/localization/`，代理快捷方式工具放在 `src/proxy/`；保留同目录模块之间的依赖关系。
-- JavaScript 运行时保存在根目录 `localization_runtime/`，测试保存在 `tests/`。修改入口或资源位置时，同步更新测试、文档与 `.github/workflows/build-mac.yml`。
+- 管理器代码放在 `src/antigravity_manager/`，汉化、还原及共享 Python 服务放在 `src/localization/`，代理快捷方式工具放在 `src/proxy/`；保留模块之间的依赖关系。
+- JavaScript 运行时保存在 `src/localization_runtime/`，测试保存在 `tests/`；除根目录 `README.md` 外，项目 Markdown 文档放在 `docs/`。修改入口或资源位置时，同步更新测试、文档与 `.github/workflows/build-mac.yml`。
 - 保持代码简洁易读
 - 添加必要的注释（中文或英文均可）
 - 确保新功能经过测试

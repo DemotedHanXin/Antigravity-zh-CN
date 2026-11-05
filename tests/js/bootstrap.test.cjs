@@ -2,7 +2,7 @@
 const test=require('node:test'), assert=require('node:assert/strict');
 const {EventEmitter}=require('node:events');
 const path=require('node:path');
-const {startBridge,verifyInstallation}=require('../../localization_runtime/bootstrap.cjs');
+const {startBridge,verifyInstallation}=require('../../src/localization_runtime/bootstrap.cjs');
 function setup(){
   const app=new EventEmitter(),registered=[];let disposed=0;
   const profile={verified:true,moduleType:'commonjs',preload:'dist/preload.js',trustedUrls:['https://fixture.invalid/ui']};

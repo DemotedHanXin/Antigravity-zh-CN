@@ -1,6 +1,6 @@
 # Antigravity-zh-CN
 
-English | [简体中文](README.md)
+English | [简体中文](../README.md)
 
 Chinese UI localization, restoration, and Windows proxy launcher / shortcut management for Antigravity Desktop. CLI tools use the Python standard library; the unified manager requires PySide6.
 
@@ -10,15 +10,17 @@ This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigra
 
 Development stays on `feat/DragonGirl`, progressing from M0 through M5. Each stage delivers documentation, a local commit and an annotated review tag, then stops for explicit user approval. No automatic push, merge or release is included. **M0–M2 are approved. M3 unified manager is complete, pending review; M4 has not started.**
 
-See the [M0 agreement](docs/development/M0-baseline.md), [M3 record](docs/development/M3-unified-manager.md) and [progress tracker](docs/development/PROGRESS.md) (Chinese). Windows packaging remains M4 work.
+See the [M0 agreement](development/M0-baseline.md), [M3 record](development/M3-unified-manager.md) and [progress tracker](development/PROGRESS.md) (Chinese). Windows packaging remains M4 work.
 
 Source manager (Windows, Python 3.11+):
 
 ```powershell
 python -m pip install -r requirements-manager.txt
-python -m antigravity_manager
+python main.py
 # Isolated review data; no automatic patch, app launch or API request
-python -m antigravity_manager --data-dir .m3-lab/review
+python main.py --data-dir .m3-lab/review
+# Command-line entry without a GUI
+python main.py --cli --help
 ```
 
 ## DragonGirl development status — read first
@@ -29,15 +31,15 @@ Repatching a matching build disables the legacy broad DOM observer. Web translat
 
 All four labels currently match the built-in dictionary, so they do not naturally generate AI fallback requests. Isolated real-application tests used a deliberately missed label and a local fixed provider to validate requests, display, failures, disabled mode, navigation and service recovery. **Real-provider page translation has not been validated.** Updating repository files does not change the user's daily installation; applying the patch to a chosen installation is a separate operation.
 
-- Unified manager: `python -m antigravity_manager`. The older Tk settings tool remains available.
+- Unified manager: `python main.py`. The older Tk settings tool remains available.
 - Order: personal dictionary → built-in dictionary/rules → valid pending candidate → AI. AI is off by default; native menus remain static.
 - New AI results enter a separate seven-day candidate store. Reuse never extends expiry; acceptance creates a personal entry, and rejection suppresses requests until explicitly lifted.
-- Dictionary/review CLI: `python src/localization/Translation-Dictionary.py --help`. Static data lives in `localization_runtime/builtin-dictionary.json`; regex logic stays in code.
+- Dictionary/review CLI: `python src/localization/Translation-Dictionary.py --help`. Static data lives in `src/localization_runtime/builtin-dictionary.json`; regex logic stays in code.
 - Separate OpenAI Responses, Gemini generateContent, Claude Messages, and custom OpenAI-compatible Chat Completions adapters.
 - Windows keys use current-user DPAPI protection; existing plaintext configuration migrates on first read. Another account cannot directly decrypt it. Repatching/restoration do not delete settings or the personal dictionary.
 - Connection testing is an explicit, potentially billable action requiring confirmation and external Node. Success does not establish application compatibility.
 
-See the [DragonGirl guide](docs/DRAGONGIRL.md) and [M1 record](docs/development/M1-real-integration.md) (Chinese) for scope, evidence, current regression results and remaining limits. macOS integration, real-provider page translation, GUI/frozen packages and full application coverage remain unvalidated.
+See the [DragonGirl guide](DRAGONGIRL.md) and [M1 record](development/M1-real-integration.md) (Chinese) for scope, evidence, current regression results and remaining limits. macOS integration, real-provider page translation, GUI/frozen packages and full application coverage remain unvalidated.
 
 M2 migrates old data to schema 2 on first use, retaining manual entries and marking saved AI entries as legacy/unreviewed. Legacy entries do not expire. M3 protects key-bearing configurations using disk schema 3. Update the installed component together with the tools: old components reject the new format. Development tests have not migrated daily user data, and reverting Git is not a data downgrade.
 
@@ -56,24 +58,23 @@ See [Project status and code guide](PROJECT_STATUS.md) (Chinese) for the impleme
 ## Repository layout
 
 ```text
+README.md                             # Project home and startup guide
+main.py                               # Unified entry: GUI / --cli
 src/
-├── localization/                     # Upstream localization/restoration and extensions
-│   ├── Antigravity-Patcher.py
-│   ├── Restore.py
-│   ├── antigravity_common.py
-│   ├── Translation-Settings.py
-│   ├── translation_config.py
-│   ├── translation_integration.py
-│   └── Inspect-Translation-Compatibility.py
-└── proxy/                            # Proxy and shortcut tools added by this fork
-    ├── Setup-Proxy-Shortcuts.py
-    └── Cleanup-Proxy-Shortcuts.py
-localization_runtime/                 # JavaScript runtime and compatibility registry
-tests/                                # Isolated Python / JavaScript tests
-docs/                                 # DragonGirl usage and verification guides
+├── antigravity_manager/               # Manager UI, workers and service dispatch
+├── localization/                      # Patching, restore, settings and dictionary services
+├── localization_runtime/              # JavaScript runtime, dictionary and compatibility rules
+└── proxy/                             # Windows proxy launchers and shortcuts
+tests/                                # Python / JavaScript tests and lab tools
+docs/                                 # All project Markdown except the root README
+├── README_EN.md                       # English user guide
+├── PROJECT_STATUS.md                  # Source map and implementation status
+├── CONTRIBUTING.md                    # Contribution guide
+├── development/                       # Plans, progress and stage records
+└── testing/                           # Fixture and manual verification guides
 ```
 
-Run the commands below from the repository root. Python entry points now live under `src`; use an absolute script path when launching from another working directory.
+Run the commands below from the repository root. Start the manager with `main.py`; functional source code lives under `src/`. Use an absolute entry-script path when launching from another working directory. The root also retains `requirements-manager.txt`, `LICENSE`, and Git configuration; tests and local environments remain separate.
 
 ## Requirements and setup
 
@@ -84,7 +85,7 @@ Run the commands below from the repository root. Python entry points now live un
 | Historical validation | Earlier Windows/Python 3.11 work is recorded in PROJECT_STATUS; not DragonGirl real-app acceptance |
 | DragonGirl development tests | Python and Node 22+; isolated simulations do not prove real-app compatibility |
 
-Download the complete repository and preserve this layout. Localization, restoration, settings and inspection tools import their sibling modules. Runtime resources are located relative to the source files at the repository root's `localization_runtime/`, independently of the working directory. Cleanup loads Setup from its own directory; keep the two proxy scripts together.
+Download the complete repository and preserve this layout. Localization, restoration, settings and inspection tools import their sibling modules. Runtime resources are located relative to the source files at the repository root's `src/localization_runtime/`, independently of the working directory. Cleanup loads Setup from its own directory; keep the two proxy scripts together.
 
 ```powershell
 git clone https://github.com/DemotedHanXin/Antigravity-zh-CN.git
@@ -183,12 +184,6 @@ Tests use isolated directories and mocked process control. They cover archive va
 
 See [PROJECT_STATUS.md](PROJECT_STATUS.md) for module responsibilities, file states and maintenance notes.
 
-## Screenshot
-
-![Antigravity Chinese UI example](antigravity-chinese.png)
-
-This historical example does not represent M1 coverage or complete translation of every version or generated content. Static entries live in `localization_runtime/builtin-dictionary.json`; matching builds still restrict them to the four fixed navigation labels. Expanding that scope requires separate compatibility validation.
-
 ## Contributing and license
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and the [MIT License](LICENSE). Report issues in [this fork](https://github.com/DemotedHanXin/Antigravity-zh-CN/issues). Original project: [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN).
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [MIT License](../LICENSE). Report issues in [this fork](https://github.com/DemotedHanXin/Antigravity-zh-CN/issues). Original project: [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN).

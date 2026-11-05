@@ -26,7 +26,7 @@ UI_ATTRIBUTES = {'title', 'placeholder', 'aria-label'}
 def resource_root():
     """Find repository resources or PyInstaller data, regardless of the cwd."""
     bundle = getattr(sys, '_MEIPASS', None)
-    root = Path(bundle) if bundle else Path(__file__).resolve().parents[2]
+    root = Path(bundle) if bundle else Path(__file__).resolve().parents[1]
     return root / 'localization_runtime'
 
 

@@ -127,7 +127,7 @@ def main():
             outer = ttk.Frame(root, padding=12)
             outer.pack(fill='both', expand=True)
             ttk.Label(outer, text='AI 默认关闭。开启后，仅筛选的界面文案会发给所选提供商，并可能产生费用。', wraplength=800).pack(anchor='w')
-            ttk.Label(outer, text='密钥使用 Windows 当前用户保护；其他账户无法直接解锁。统一管理器入口：python -m antigravity_manager', wraplength=800).pack(anchor='w')
+            ttk.Label(outer, text='密钥使用 Windows 当前用户保护；其他账户无法直接解锁。统一管理器入口：python main.py', wraplength=800).pack(anchor='w')
             ttk.Label(outer, text='数据目录：' + str(self.controller.store.directory), wraplength=800).pack(anchor='w', pady=(3, 8))
             notebook = ttk.Notebook(outer)
             notebook.pack(fill='both', expand=True)

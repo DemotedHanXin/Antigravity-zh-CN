@@ -4,7 +4,10 @@ import sys
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='Antigravity 中文管理器')
+    parser = argparse.ArgumentParser(
+        description='Antigravity 中文管理器',
+        epilog='命令行接口：python main.py --cli --help',
+    )
     parser.add_argument('--data-dir', help='独立用户数据目录（默认使用当前用户目录）')
     parser.add_argument('--app-dir', help='Antigravity 安装目录')
     args = parser.parse_args(argv)

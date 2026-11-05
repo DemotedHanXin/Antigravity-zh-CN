@@ -3,8 +3,11 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
-LOCALIZATION = ROOT / 'src' / 'localization'
-PROXY = ROOT / 'src' / 'proxy'
+SOURCE = ROOT / 'src'
+LOCALIZATION = SOURCE / 'localization'
+PROXY = SOURCE / 'proxy'
+RUNTIME = SOURCE / 'localization_runtime'
 
-# Production entry scripts import their sibling modules in this directory.
+# The root launcher exposes source packages; legacy tools also import siblings.
+sys.path.insert(0, str(SOURCE))
 sys.path.insert(0, str(LOCALIZATION))

@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createDOMTranslator, safeText } = require('../../localization_runtime/dom.js');
+const { createDOMTranslator, safeText } = require('../../src/localization_runtime/dom.js');
 
 class Element {
   constructor(tag, attrs = {}, classes = []) { this.nodeType = 1; this.tagName = tag; this.attrs = attrs; this.classes = classes; this.childNodes = []; this.parentElement = null; this.isConnected = true; }

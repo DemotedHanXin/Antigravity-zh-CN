@@ -39,10 +39,10 @@ jobs:
       - name: Build with runtime resources
         run: |
           python -c "import platform; assert platform.machine() == '${{ matrix.arch }}', platform.machine()"
-          python -m PyInstaller --noconfirm -F --target-arch ${{ matrix.arch }} --add-data "localization_runtime:localization_runtime" src/localization/Antigravity-Patcher.py
+          python -m PyInstaller --noconfirm -F --target-arch ${{ matrix.arch }} --add-data "src/localization_runtime:localization_runtime" src/localization/Antigravity-Patcher.py
           python -m PyInstaller --noconfirm -F --target-arch ${{ matrix.arch }} src/localization/Restore.py
-          python -m PyInstaller --noconfirm -F --target-arch ${{ matrix.arch }} --add-data "localization_runtime:localization_runtime" src/localization/Translation-Settings.py
-          python -m PyInstaller --noconfirm -F --target-arch ${{ matrix.arch }} --add-data "localization_runtime:localization_runtime" src/localization/Inspect-Translation-Compatibility.py
+          python -m PyInstaller --noconfirm -F --target-arch ${{ matrix.arch }} --add-data "src/localization_runtime:localization_runtime" src/localization/Translation-Settings.py
+          python -m PyInstaller --noconfirm -F --target-arch ${{ matrix.arch }} --add-data "src/localization_runtime:localization_runtime" src/localization/Inspect-Translation-Compatibility.py
       - name: CLI smoke checks (read-only help, not native app acceptance)
         run: |
           dist/Antigravity-Patcher --help

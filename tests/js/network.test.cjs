@@ -9,9 +9,9 @@ const tls = require('node:tls');
 const net = require('node:net');
 const dns = require('node:dns');
 const childProcess = require('node:child_process');
-const N = require('../../localization_runtime/network.cjs');
-const {probe} = require('../../localization_runtime/probe.cjs');
-const {defaultConfig, defaultDictionary} = require('../../localization_runtime/storage.cjs');
+const N = require('../../src/localization_runtime/network.cjs');
+const {probe} = require('../../src/localization_runtime/probe.cjs');
+const {defaultConfig, defaultDictionary} = require('../../src/localization_runtime/storage.cjs');
 const target = new URL('https://api.example.com/v1');
 // Public test-only identity, trusted only by an injected TLS connection in tests.
 const cert = fs.readFileSync(path.join(__dirname, '../fixtures/proxy-test-cert.pem'));
