@@ -57,3 +57,7 @@ desktop.ini
 # M2 isolated data migration/review tests; never commit user state or credentials
 /.m2-lab/
 /.m2-lab-*/
+
+# M3 isolated manager state and headless test artifacts
+/.m3-lab/
+/.m3-lab-*/

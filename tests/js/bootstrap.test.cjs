@@ -175,7 +175,7 @@ test('installed byte and external resource fingerprints are enforced before brid
   const profile = {windowBinding: {kind: 'antigravity-local-hub-v1'}, main: 'dist/main.js', preload: 'dist/preload.js', runtimeIntegrity: {}, resourcesFiles: {}};
   const names = ['package.json', profile.main, profile.preload, 'dist/utils.js', 'dist/languageServer.js',
     'dist/constants.js', '.dragongirl/bootstrap.cjs', '.dragongirl/main.cjs', '.dragongirl/providers.cjs',
-    '.dragongirl/network.cjs', '.dragongirl/storage.cjs'];
+    '.dragongirl/network.cjs', '.dragongirl/storage.cjs', '.dragongirl/credentials.cjs'];
   function add(base, name, manifest) {
     const file = path.join(base, name), content = 'fixture: ' + name;
     fs.mkdirSync(path.dirname(file), {recursive: true}); fs.writeFileSync(file, content);

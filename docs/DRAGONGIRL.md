@@ -1,10 +1,10 @@
 # DragonGirl：AI 补译开发版使用与验证说明
 
-> **M0、M1 已获批准，M2 词典与审核流程已完成、待审核，未发布。** 2.28.2 / Windows x64 的 profile 仍为 `antigravity-2.28.2-win32-x64-navigation`，只覆盖下述四个导航正文标签。接入实测见 [M1 记录](development/M1-real-integration.md)，当前数据协议与回归见 [M2 记录](development/M2-dictionary-review.md) 和 [开发进度](development/PROGRESS.md)。更新源码不会自行改动日常安装。
+> **M0–M2 已获批准，M3 统一管理器已完成、待审核，未发布。** 2.28.2 / Windows x64 的 profile 仍为 `antigravity-2.28.2-win32-x64-navigation`，只覆盖下述四个导航正文标签。接入实测见 [M1 记录](development/M1-real-integration.md)，当前管理器与验证见 [M3 记录](development/M3-unified-manager.md) 和 [开发进度](development/PROGRESS.md)。更新源码不会自行改动日常安装。
 
 ## 1. 已提供的组件与明确边界
 
-- 独立 Tkinter GUI，管理四类提供商、AI 开关、个人词典和缓存失效标记；待确认审核提供结构化 CLI，统一 PySide6 界面留给 M3。
+- 统一 PySide6 管理器提供概览、词典、候选审核、AI 设置、代理与启动说明、日志诊断；旧 Tkinter 设置工具保留。代理扫描／执行图形入口与安装包属于 M4。
 - Python / Node 共用的用户目录、版本化 JSON、跨进程锁与原子替换；词条手工编辑优先、删除记录防止旧结果恢复词条。
 - 主进程翻译服务、受限 IPC、去重/缓存/队列/限流与四种提供商适配器。
 - 默认空白名单的 DOM 补译模块，异步回写前检查原文、节点、导航和配置/词典版本。
@@ -31,19 +31,22 @@ Projects、同名 aria-label、其他页面正文及带 query/hash 页面均不�
 
 仓库改动和隔离副本验收均不自动更新日常安装。只有另行对目标安装执行汉化才会应用本次 profile；应用后网页翻译范围可能比旧广域注入更少。需要扩展页面或标签时，必须另外取得并验证对应结构和来源。
 
-## 2. 启动设置界面
+## 2. 启动管理器与设置界面
 
 从完整仓库的根目录运行：
 
-```bash
-python src/localization/Translation-Settings.py
-# macOS 如需使用 python3：
-python3 src/localization/Translation-Settings.py
+```powershell
+python -m pip install -r requirements-manager.txt
+python -m antigravity_manager
+# 独立审核目录，避免迁移日常配置：
+python -m antigravity_manager --data-dir .m3-lab/review
 ```
 
 本文中的命令均从仓库根目录执行。源码入口位于 `src/localization/`；从其他工作目录启动时使用完整脚本路径。
 
-需要带 Tk 的 Python 和可用桌面显示环境。导入模块不会弹出 GUI、修改安装或发起网络请求。缺少 Tk/显示环境会说明不可用，而不是绕过检查。单纯编辑配置不要求 Node；可选连接测试需要 `node` 在 PATH 中，并随源码/冻结包附带 `localization_runtime/probe.cjs`。
+Windows 管理器需要 Python 3.11+、PySide6 和桌面显示环境。`python -m antigravity_manager.cli --help` 可在不导入 Qt 的情况下使用共享结构化服务；旧设置工具仍可用 `python src/localization/Translation-Settings.py` 启动。导入模块不会弹出 GUI、修改安装或发起网络请求。单纯编辑配置不要求 Node；可选连接测试需要 `node` 在 PATH 中，并保留完整 `localization_runtime/`。安装、还原、文件读写和 API 测试在后台任务中执行；任务未结束时关闭窗口会等待完成，不强制中断文件切换。
+
+概览分别显示原版归档兼容、磁盘组件、AI 配置和最近一次主动 API 测试；没有运行握手时连接状态显示未知，不能把磁盘文件存在当作应用已接通。汉化／还原前确认保存工作和退出目标应用，执行后不自动启动；启动按钮是独立操作。词典编辑、配置保存和候选审核都使用显示时的版本号，发生外部修改会拒绝旧草稿覆盖，需要手动刷新。每 60 秒到期清理不会自动覆盖未保存表单。
 
 首次默认 `enabled=false`；`autoSave=false` 仅为弃用的兼容字段，不能再开启，新 AI 结果全部进入待确认流程。地址有默认值，模型和密钥留空。自行填写提供商、模型、密钥，并明确保存。**保存配置不自动勾选启用 AI；勾选启用也不能绕过兼容 profile 检查。** 模型名称和账户额度由所选服务决定，不自动查询或承诺免费额度。
 
@@ -79,7 +82,7 @@ Google 的 `https://generativelanguage.googleapis.com/v1beta/openai` 应搭配 G
 
 当前网络层仅允许 HTTPS 公网域名目标，拒绝内嵌凭据、查询参数、片段、本机/私网解析与重定向认证转发；不支持本地 HTTP 模型服务器。自定义地址会接收该提供商密钥和筛选后的 UI 文案，务必核对主机。代理通过 CONNECT 连接经过本机 DNS 校验的公网 IP，隧道内继续校验原 API 域名的 TLS 证书，API 密钥不会放进 CONNECT 请求头。DNS、代理握手、TLS 和响应读取共用总超时。仍需能在本机将 API 域名解析为公网地址；若使用返回保留地址的 Fake-IP 模式，应为 API 域名配置真实 DNS 解析。
 
-## 4. 用户数据与明文密钥风险
+## 4. 用户数据与密钥保护
 
 | 系统 | 目录 |
 | --- | --- |
@@ -89,13 +92,15 @@ Google 的 `https://generativelanguage.googleapis.com/v1beta/openai` 应搭配 G
 
 Linux 用户目录支持只用于设置/开发工具，不表示汉化安装工具支持 Linux。
 
-- `config.json`：schema/revision、开关、四类提供商地址/模型/**明文密钥**、请求限制和缓存版本。
+- `config.json`：schema/revision、开关、四类提供商地址/模型、请求限制和缓存版本；含密钥配置使用 schema3、`credentialProtection=windows-dpapi-v1` 与 `apiKeyProtected` 密文。
 - `personal-dictionary.json`：schema/revision、原文→译文、来源/更新时间和删除记录。
 - `pending-translations/state.json`：独立候选 entries、永久拒绝记录 rejected 以及使旧响应失效的 epochs；候选从首次生成起 7 天，复用不续期。
 - `.translation-journal.json`：跨文件迁移／采纳操作的恢复事务，不是导出文件，也不应手工删除或共享。
 - `.translation.lock/`：跨进程写入锁。锁争用有超时，不强删其他进程的锁；异常遗留时先确认所有相关进程已退出，再调查锁状态，不在写入进行中手工删除。
 
-明文不是加密：同一账户下其他程序、共享账户、云盘同步、备份和文件泄露都可能暴露密钥并造成费用。GUI 遮蔽输入和脱敏日志不能消除磁盘风险；保存密钥前有显式确认。不要把此目录加入仓库、截图公开或发给他人。工具不自动读取浏览器/系统凭据。
+M3 在 Windows 使用当前用户 DPAPI；旧含密钥配置在持锁读取时迁移，配置与恢复事务均写入密文。Python 与 Node 能互相读取，应用内组件无需管理器常驻；Node 通过固定 PowerShell 逻辑和标准输入解锁，不将密钥放在命令行。无法解密、非 Windows 或保护不可用时停止，不回退明文保存。无密钥配置可保持 schema2。旧组件不支持 schema3，应与管理器同时更新。
+
+管理器加载时仅得到“已设置密钥”标记，留空保存保留旧密钥，明确清除才删除；新输入只用于保存。DPAPI 不防同一 Windows 用户下的其他程序，跨用户／重装系统后的恢复不能靠复制配置保证，应重新配置密钥。工具不读取浏览器或系统账户凭据，不将密钥放进页面 IPC、诊断或词典导出。
 
 同目录临时写入、文件同步和原子替换减少半文件风险；版本冲突会拒绝覆盖，需要重新加载。损坏 JSON/未知 schema 不自动重建覆盖。文件权限、磁盘满或保存失败会报告错误。个人词典手工条目不被 AI 自动覆盖；删除记录用于阻止在途请求把词条重新保存。
 
@@ -113,6 +118,8 @@ python -B src/localization/Translation-Dictionary.py --data-dir .m2-lab/demo pen
 ```
 
 按 `--help` 使用 `set`／`restore-default`，提供 `dictionaryRevision`；`accept`／`reject`／`unblock` 使用 `candidatesRevision`，均通过 `--revision` 传入。`accept --translation` 可编辑后采纳；`cleanup` 仅清理到期候选。完整步骤见 [M2 使用说明](development/M2-dictionary-review.md#4-使用方式已知问题及恢复方法)。
+
+管理器和 CLI 还提供 `import-dictionary --path 文件 --revision N` 与 `export-dictionary --path 文件`。导出仅含个人原文／译文，格式为 `{"schemaVersion":1,"kind":"dragongirl-dictionary","entries":{"Save":"保存"}}`；不含设置、密钥或候选。导入原子合并为手工词条，同名覆盖，不删除其他词条；错误或版本冲突不部分导入。导出位置不能在当前用户数据目录内，以免覆盖配置或恢复事务。
 
 重新汉化、官方更新与 `src/localization/Restore.py` 不删除用户目录。官方更新可能覆盖注入，使补译暂停；重新验证并汉化后才恢复。还原英文不是清除个人数据，清除账户/密钥需另行处理。
 

@@ -2,15 +2,24 @@
 
 [English](README_EN.md) | 简体中文
 
-为 Antigravity 桌面端提供中文界面补丁、汉化还原，以及 Windows 代理启动与快捷方式管理。运行脚本使用 Python 标准库，不需要安装 pip 依赖。
+为 Antigravity 桌面端提供中文界面补丁、汉化还原，以及 Windows 代理启动与快捷方式管理。命令行工具使用 Python 标准库；统一管理器需要 PySide6。
 
 本分支基于 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN) 扩展。原有翻译规则以 v2.21.1 的文件结构为基础；新增的 2.28.2 接入范围见下文，不保证所有版本的文本覆盖率。本次开发针对仓库中的 **源码**；旧版 Release 中的可执行程序需要重新打包后才包含这些改动。
 
 ## Windows 管理器分阶段开发
 
-在 `feat/DragonGirl` 上按 M0–M5 顺序开发 Python + PySide6 管理器。每阶段交付记录文档、本地提交和附注标签，等待用户审核通过后才继续；不自动推送、合并或发布。当前 **M0、M1 已获批准，M2 词典与审核流程已完成、待审核；M3 尚未开始**。
+在 `feat/DragonGirl` 上按 M0–M5 顺序开发 Python + PySide6 管理器。每阶段交付记录文档、本地提交和附注标签，等待用户审核通过后才继续；不自动推送、合并或发布。当前 **M0–M2 已获批准，M3 统一管理器已完成、待审核；M4 尚未开始**。
 
-需求和架构见 [M0 基线与开发约定](docs/development/M0-baseline.md)，当前实现与验证见 [M2 阶段记录](docs/development/M2-dictionary-review.md) 和 [开发进度](docs/development/PROGRESS.md)。PySide6 管理器和 Windows 安装包属于后续阶段。
+需求和架构见 [M0 基线与开发约定](docs/development/M0-baseline.md)，当前实现与验证见 [M3 阶段记录](docs/development/M3-unified-manager.md) 和 [开发进度](docs/development/PROGRESS.md)。Windows 安装包属于 M4。
+
+源码管理器启动（Windows、Python 3.11+）：
+
+```powershell
+python -m pip install -r requirements-manager.txt
+python -m antigravity_manager
+# 首次审核建议用独立数据目录；不会自动汉化、启动应用或测试 API
+python -m antigravity_manager --data-dir .m3-lab/review
+```
 
 ## DragonGirl 开发版：请先了解状态
 
@@ -20,17 +29,17 @@
 
 这四个标签目前都命中内置词典，正常运行不会由它们产生自然未命中的 AI 请求。隔离实测通过人为未命中和本地固定提供方验证了请求、显示、失败、关闭、导航及服务恢复链路，**没有验证真实提供方的页面补译**。仅更新仓库源码不会修改日常安装；需另行对目标安装执行汉化才会应用新 profile。
 
-- 独立 GUI：`python src/localization/Translation-Settings.py`，需要带 Tk 的 Python/桌面环境。
+- 统一管理器：`python -m antigravity_manager`；旧 Tk 设置工具仍保留。
 - 个人词典 → 内置词典／规则 → 有效待确认译文 → AI；AI 默认关闭，原生菜单不接个人覆盖或 AI。
 - 新 AI 结果统一进入独立候选，首次生成后保留 7 天、复用不续期；采纳后才进入个人词典，拒绝持续抑制直到解除。
 - 词典／审核 CLI：`python src/localization/Translation-Dictionary.py --help`；内置数据在 `localization_runtime/builtin-dictionary.json`，正则逻辑仍由代码维护。
 - OpenAI Responses、Gemini generateContent、Claude Messages 及自定义 OpenAI 兼容 Chat Completions 四种协议。
-- 密钥明文保存在用户目录，保存前明确提示；配置/个人词典不会随汉化更新或还原删除。
+- Windows 密钥使用当前用户 DPAPI 保护，已有明文配置在首次读取时迁移；配置/个人词典不会随汉化更新或还原删除。跨账户无法直接解密。
 - 连接测试为单独、需确认的可能计费操作，需要外部 Node；通过不表示真实应用桥接可用。
 
 完整使用方式和边界见 [DragonGirl 说明](docs/DRAGONGIRL.md)；实测证据、最新回归结果及未验证范围见 [M1 阶段记录](docs/development/M1-real-integration.md)。macOS 桥接、真实 AI 页面补译、GUI／冻结包及完整应用覆盖仍未验收。
 
-M2 首次读取旧配置时会迁移到 schema2，保留全部旧手工和历史 AI 词条；历史 AI 标为未审核，不进入过期清理。请同步更新应用内翻译组件，旧组件遇到新格式会暂停增强翻译。源码开发和隔离测试没有迁移日常用户数据；回退 Git 不等于数据降级。
+M2 首次读取旧配置时会迁移到 schema2，保留全部旧手工和历史 AI 词条；历史 AI 标为未审核，不进入过期清理。M3 将含密钥配置保护为磁盘 schema3。请同步更新应用内翻译组件，旧组件遇到新格式会暂停增强翻译。源码开发和隔离测试没有迁移日常用户数据；回退 Git 不等于数据降级。
 
 ## 原有功能与修复
 

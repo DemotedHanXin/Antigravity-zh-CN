@@ -2,15 +2,24 @@
 
 English | [简体中文](README.md)
 
-Chinese UI localization, restoration, and Windows proxy launcher / shortcut management for Antigravity Desktop. Runtime scripts use the Python standard library; no pip packages are required.
+Chinese UI localization, restoration, and Windows proxy launcher / shortcut management for Antigravity Desktop. CLI tools use the Python standard library; the unified manager requires PySide6.
 
 This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN). Legacy translation rules target the v2.21.1 layout; the new, limited 2.28.2 integration is described below. Text coverage and compatibility with other versions are not guaranteed. These changes apply to **the source in this repository**. Previously published executables need rebuilding to include them.
 
 ## Staged Windows manager development
 
-Development stays on `feat/DragonGirl`, progressing from M0 through M5. Each stage delivers documentation, a local commit and an annotated review tag, then stops for explicit user approval. No automatic push, merge or release is included. **M0 and M1 are approved. M2 dictionary and review workflows are complete, pending review; M3 has not started.**
+Development stays on `feat/DragonGirl`, progressing from M0 through M5. Each stage delivers documentation, a local commit and an annotated review tag, then stops for explicit user approval. No automatic push, merge or release is included. **M0–M2 are approved. M3 unified manager is complete, pending review; M4 has not started.**
 
-See the [M0 agreement](docs/development/M0-baseline.md), [M2 record](docs/development/M2-dictionary-review.md) and [progress tracker](docs/development/PROGRESS.md) (Chinese). The PySide6 manager and Windows installer remain later-stage work.
+See the [M0 agreement](docs/development/M0-baseline.md), [M3 record](docs/development/M3-unified-manager.md) and [progress tracker](docs/development/PROGRESS.md) (Chinese). Windows packaging remains M4 work.
+
+Source manager (Windows, Python 3.11+):
+
+```powershell
+python -m pip install -r requirements-manager.txt
+python -m antigravity_manager
+# Isolated review data; no automatic patch, app launch or API request
+python -m antigravity_manager --data-dir .m3-lab/review
+```
 
 ## DragonGirl development status — read first
 
@@ -20,17 +29,17 @@ Repatching a matching build disables the legacy broad DOM observer. Web translat
 
 All four labels currently match the built-in dictionary, so they do not naturally generate AI fallback requests. Isolated real-application tests used a deliberately missed label and a local fixed provider to validate requests, display, failures, disabled mode, navigation and service recovery. **Real-provider page translation has not been validated.** Updating repository files does not change the user's daily installation; applying the patch to a chosen installation is a separate operation.
 
-- Independent settings GUI: `python src/localization/Translation-Settings.py`; requires Tk and a desktop display.
+- Unified manager: `python -m antigravity_manager`. The older Tk settings tool remains available.
 - Order: personal dictionary → built-in dictionary/rules → valid pending candidate → AI. AI is off by default; native menus remain static.
 - New AI results enter a separate seven-day candidate store. Reuse never extends expiry; acceptance creates a personal entry, and rejection suppresses requests until explicitly lifted.
 - Dictionary/review CLI: `python src/localization/Translation-Dictionary.py --help`. Static data lives in `localization_runtime/builtin-dictionary.json`; regex logic stays in code.
 - Separate OpenAI Responses, Gemini generateContent, Claude Messages, and custom OpenAI-compatible Chat Completions adapters.
-- Keys are stored **in plaintext** in the user directory with an explicit save warning. Repatching/restoration do not delete settings or the personal dictionary.
+- Windows keys use current-user DPAPI protection; existing plaintext configuration migrates on first read. Another account cannot directly decrypt it. Repatching/restoration do not delete settings or the personal dictionary.
 - Connection testing is an explicit, potentially billable action requiring confirmation and external Node. Success does not establish application compatibility.
 
 See the [DragonGirl guide](docs/DRAGONGIRL.md) and [M1 record](docs/development/M1-real-integration.md) (Chinese) for scope, evidence, current regression results and remaining limits. macOS integration, real-provider page translation, GUI/frozen packages and full application coverage remain unvalidated.
 
-M2 migrates old data to schema 2 on first use, retaining manual entries and marking saved AI entries as legacy/unreviewed. Legacy entries do not expire. Update the installed component together with the tools: old components reject the new format. Development tests have not migrated daily user data, and reverting Git is not a data downgrade.
+M2 migrates old data to schema 2 on first use, retaining manual entries and marking saved AI entries as legacy/unreviewed. Legacy entries do not expire. M3 protects key-bearing configurations using disk schema 3. Update the installed component together with the tools: old components reject the new format. Development tests have not migrated daily user data, and reverting Git is not a data downgrade.
 
 ## Existing features and repairs
 

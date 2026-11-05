@@ -16,6 +16,11 @@ def parser():
     listing.add_argument('--query', default='')
     commands.add_parser('pending', help='List active candidates, persistent rejections and candidatesRevision')
     commands.add_parser('cleanup', help='Remove expired candidates without making requests')
+    importing = commands.add_parser('import-dictionary', help='Merge an exported JSON dictionary atomically')
+    importing.add_argument('--path', required=True, type=Path)
+    importing.add_argument('--revision', required=True, type=int)
+    exporting = commands.add_parser('export-dictionary', help='Export personal translations without settings or keys')
+    exporting.add_argument('--path', required=True, type=Path)
     for name in ('set', 'restore-default', 'accept', 'reject', 'unblock'):
         command = commands.add_parser(name)
         command.add_argument('--source', required=True)

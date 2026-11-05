@@ -33,7 +33,7 @@ function verifyInstallation(appRoot, profile) {
   const dynamic = profile.windowBinding?.kind === LOCAL_HUB;
   const required = dynamic ? ['package.json', profile.main, profile.preload, 'dist/utils.js',
     'dist/languageServer.js', 'dist/constants.js', '.dragongirl/bootstrap.cjs', '.dragongirl/main.cjs',
-    '.dragongirl/providers.cjs', '.dragongirl/network.cjs', '.dragongirl/storage.cjs'] : [];
+    '.dragongirl/providers.cjs', '.dragongirl/network.cjs', '.dragongirl/storage.cjs', '.dragongirl/credentials.cjs'] : [];
   if (dynamic && (!profile.runtimeIntegrity || !profile.resourcesFiles ||
       !required.every(name => Object.hasOwn(profile.runtimeIntegrity, name)) ||
       !Object.hasOwn(profile.resourcesFiles, 'bin/language_server.exe'))) throw new Error('Missing installation integrity');

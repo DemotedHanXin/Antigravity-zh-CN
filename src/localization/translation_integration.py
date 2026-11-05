@@ -12,7 +12,7 @@ import sys
 
 from antigravity_common import _contained, _no_link
 
-RUNTIME_FILES = ('main.cjs', 'providers.cjs', 'network.cjs', 'storage.cjs', 'bootstrap.cjs')
+RUNTIME_FILES = ('main.cjs', 'providers.cjs', 'network.cjs', 'storage.cjs', 'credentials.cjs', 'bootstrap.cjs')
 REGISTRY = 'compatibility.json'
 DYNAMIC_BINDING = 'antigravity-local-hub-v1'
 BINDING_FILES = {'dist/utils.js', 'dist/languageServer.js', 'dist/constants.js'}

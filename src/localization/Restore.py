@@ -1,6 +1,7 @@
 # coding: utf-8
 """Validate and restore the original application without deleting its only code."""
 import argparse
+import json
 import stat
 import subprocess
 import sys
@@ -44,19 +45,20 @@ def _app_snapshot(path, parent):
     return _check_app_directory(path, parent) if _exists(path) else None
 
 
-def restore(app_dir=None, launch=True):
+def restore(app_dir=None, launch=True, log=print, event=None):
     """Return 0 on completion and 2 if original code is restored but cleanup fails.
 
     Validation and commit failures raise before any success message. The caller
     must never discard a quarantined directory if a rollback also fails.
     """
+    emit = event if event is not None else lambda step, status: None
     root = discover_install(app_dir)
     resources = resources_dir(root)
     archive = resources / 'app.asar'
     disabled = resources / 'app.asar.disabled'
     application = resources / 'app'
     sidecar = resources / 'app.asar.unpacked'
-    print('[安装目录] ' + str(root))
+    log('[安装目录] ' + str(root))
 
     if _exists(archive) and _exists(disabled):
         raise ValueError('app.asar 与 app.asar.disabled 同时存在，可能来自不同版本；未覆盖或删除任何文件，请先核对安装状态。')
@@ -70,15 +72,17 @@ def restore(app_dir=None, launch=True):
     validate_asar(source, unpacked_dir=sidecar)
     if _snapshot(source) != snapshot:
         raise ValueError('原版归档在校验期间发生变化，未执行还原。')
+    emit('validate', 'completed')
     app_snapshot = _app_snapshot(application, resources)
     has_app = app_snapshot is not None
     needs_activation = source == disabled
     if not has_app and not needs_activation:
-        print('[完成] 原版归档及主入口校验通过，没有汉化工作目录需要清理。')
+        log('[完成] 原版归档及主入口校验通过，没有汉化工作目录需要清理。')
         return 0
 
-    print('[执行] 正在关闭该安装目录下的 Antigravity...')
+    log('[执行] 正在关闭该安装目录下的 Antigravity...')
     stop_application(root)
+    emit('stop', 'completed')
     if _snapshot(source) != snapshot:
         raise ValueError('原版归档在还原前发生变化，未修改安装文件。')
     if _app_snapshot(application, resources) != app_snapshot:
@@ -106,21 +110,26 @@ def restore(app_dir=None, launch=True):
                     raise ValueError('resources/app 已被其他程序创建，不能覆盖。')
                 quarantined.rename(application)
             except BaseException as rollback_error:
+                emit('rollback', 'incomplete')
                 raise RuntimeError('还原未完成：{}；工作目录恢复失败：{}。原工作目录仍保留在 {}，请勿删除。'.format(
                     error, rollback_error, quarantined)) from error
+        emit('rollback', 'completed')
         raise
 
+    emit('activate', 'completed')
     # The original archive is now active and app no longer shadows it. Never
     # move a partly deleted quarantine back to the active app directory.
     if quarantined is not None:
         try:
             remove_tree(quarantined, resources)
         except (OSError, ValueError, RuntimeError) as error:
-            print('[未完成] 原版 app.asar 已就位，但汉化临时目录未能清理：{}；残留位置：{}'.format(error, quarantined))
-            print('[说明] 未报告清理成功，也未自动启动；解除文件占用或权限问题后可清理上述目录。')
+            log('[未完成] 原版 app.asar 已就位，但汉化临时目录未能清理：{}；残留位置：{}'.format(error, quarantined))
+            log('[说明] 未报告清理成功，也未自动启动；解除文件占用或权限问题后可清理上述目录。')
+            emit('cleanup', 'incomplete')
             return 2
 
-    print('[完成] 已恢复原版归档并清除汉化工作目录；代理启动文件和快捷方式保持不变。')
+    emit('cleanup', 'completed')
+    log('[完成] 已恢复原版归档并清除汉化工作目录；代理启动文件和快捷方式保持不变。')
     if launch:
         try:
             launch_application(root)
@@ -133,7 +142,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='校验官方归档后安全还原 Antigravity，保留唯一可运行的代码。')
     parser.add_argument('--app-dir', help='Antigravity 安装目录；macOS 使用 Antigravity.app 路径')
     parser.add_argument('--no-launch', action='store_true', help='还原完成后不自动启动软件')
+    parser.add_argument('--json', action='store_true', help='返回与管理器共用的结构化结果；须显式指定目录且不自动启动')
     args = parser.parse_args(argv)
+    if args.json:
+        from installation_service import InstallationService
+        result = InstallationService().execute('restore', app_dir=args.app_dir, confirmed=True)
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result['ok'] else 1
     try:
         return restore(args.app_dir, launch=not args.no_launch)
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:

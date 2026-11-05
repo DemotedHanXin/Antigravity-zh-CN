@@ -4,12 +4,12 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs/promises');
 const os=require('node:os');
 const path=require('node:path');
-const S=require('../../localization_runtime/storage.cjs');
+const S=require('../credential_fixture.cjs');
 const NOW=1700000000000;
 async function fixture(t) {
   const directory=await fs.mkdtemp(path.join(os.tmpdir(),'m2-storage-'));
   t.after(()=>fs.rm(directory,{recursive:true,force:true}));
-  return new S.Store(directory,{clock:()=>NOW,lockTimeoutMs:100});
+  return new S.Store(directory,{clock:()=>NOW,lockTimeoutMs:2000});
 }
 function enabled() {
   const config=S.defaultConfig();config.enabled=true;config.revision=4;

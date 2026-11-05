@@ -5,6 +5,7 @@ const os=require('node:os');
 const crypto=require('node:crypto');
 const {TextDecoder}=require('node:util');
 const {DEFAULTS,PROVIDERS,TranslationError,endpoint}=require('./providers.cjs');
+const {WindowsProtector}=require('./credentials.cjs');
 const DEFAULT_LIMITS=Object.freeze({concurrency:2,batchSize:8,batchCharacters:2000,textLength:160,timeoutMs:15000,requestsPerMinute:12,queueSize:128,sessionRequests:100});
 const LIMIT_BOUNDS=Object.freeze({concurrency:[1,2],batchSize:[1,8],batchCharacters:[1,2000],textLength:[1,160],timeoutMs:[1000,15000],requestsPerMinute:[1,12],queueSize:[1,128],sessionRequests:[1,100]});
 const own=(o,k)=>Object.prototype.hasOwnProperty.call(o,k);
@@ -117,8 +118,40 @@ function invalidate(candidates,source) {
   delete candidates.entries[source];
 }
 class Store {
-  constructor(directory=userDirectory(),{clock=Date.now,lockTimeoutMs=2000}={}) {
+  constructor(directory=userDirectory(),{clock=Date.now,lockTimeoutMs=2000,protector=new WindowsProtector()}={}) {
     this.directory=directory;this.clock=clock;this.lockTimeoutMs=lockTimeoutMs;
+    this.protector=protector;
+  }
+  async openConfig(value,decrypt=true) {
+    if(!record(value)||value.schemaVersion!==3)return validateConfig(value);
+    const result=structuredClone(value);result.schemaVersion=2;
+    if(result.credentialProtection!=='windows-dpapi-v1')throw new TranslationError('invalid_credentials');
+    delete result.credentialProtection;
+    if(!record(result.providers)||Object.keys(result.providers).sort().join(',')!==[...PROVIDERS].sort().join(','))throw new TranslationError('invalid_configuration');
+    for(const profile of Object.values(result.providers)) {
+      if(!record(profile)||Object.keys(profile).sort().join(',')!=='apiKeyProtected,baseUrl,model')throw new TranslationError('invalid_credentials');
+      const protectedValue=profile.apiKeyProtected;delete profile.apiKeyProtected;
+      if(typeof protectedValue!=='string'||protectedValue.length>32768||protectedValue.length%4||
+        (protectedValue&&!/^[A-Za-z0-9+/]+={0,2}$/.test(protectedValue))||
+        Buffer.from(protectedValue,'base64').toString('base64')!==protectedValue)throw new TranslationError('invalid_credentials');
+      profile.apiKey=protectedValue?(decrypt?await this.protector.unprotect(protectedValue):'protected'):'';
+    }
+    return validateConfig(result);
+  }
+  async sealConfig(value) {
+    if(value.schemaVersion===3){await this.openConfig(value,false);return value;}
+    validateConfig(value);
+    if(!Object.values(value.providers).some(profile=>profile.apiKey))return value;
+    const result=Object.fromEntries(Object.keys(defaultConfig()).map(key=>[key,structuredClone(value[key])]));
+    result.schemaVersion=3;result.credentialProtection='windows-dpapi-v1';
+    for(const [name,profile] of Object.entries(value.providers))result.providers[name]={baseUrl:profile.baseUrl,model:profile.model,
+      apiKeyProtected:profile.apiKey?await this.protector.protect(profile.apiKey):''};
+    await this.openConfig(result,false);return result;
+  }
+  async sealImages(images) {
+    const result=structuredClone(images);
+    if(own(result,'config.json'))result['config.json']=await this.sealConfig(result['config.json']);
+    return result;
   }
   now(value) {
     value=value===undefined?this.clock():value;
@@ -149,9 +182,9 @@ class Store {
   }
   async validateImages(images) {
     if(!record(images)||!Object.keys(images).length||Object.keys(images).some(name=>!STATE_FILES.includes(name)))throw new TranslationError('invalid_journal');
-    const validators={'config.json':validateConfig,'personal-dictionary.json':validateDictionary,[CANDIDATES_FILE]:validateCandidates};
+    const validators={'config.json':value=>this.openConfig(value,false),'personal-dictionary.json':validateDictionary,[CANDIDATES_FILE]:validateCandidates};
     for(const [name,value] of Object.entries(images)) {
-      validators[name](value);encodedSize(value);await this.parent(name);
+      await validators[name](value);encodedSize(value);await this.parent(name);
       try{await regular(path.join(this.directory,name));}catch(error){if(error.code!=='ENOENT')throw error;}
     }
   }
@@ -164,10 +197,17 @@ class Store {
     if(journal===MISSING)return;
     if(!record(journal)||Object.keys(journal).sort().join(',')!=='files,id,kind,schemaVersion'||journal.schemaVersion!==1||
        journal.kind!=='dragongirl-state-transaction'||typeof journal.id!=='string'||!/^[a-f0-9]{32}$/.test(journal.id))throw new TranslationError('invalid_journal');
-    await this.validateImages(journal.files);await this.applyImages(journal.files);
+    await this.validateImages(journal.files);
+    if(journal.files['config.json']?.schemaVersion===3)await this.openConfig(journal.files['config.json']);
+    const protectedImages=await this.sealImages(journal.files);
+    if(JSON.stringify(protectedImages)!==JSON.stringify(journal.files)){
+      journal.files=protectedImages;await this.writeFile(JOURNAL_FILE,journal,MAX_JOURNAL_BYTES);
+    }
+    await this.applyImages(journal.files);
   }
   async commit(images) {
     if(!Object.keys(images).length)return;
+    images=await this.sealImages(images);
     await this.validateImages(images);
     const journal={schemaVersion:1,kind:'dragongirl-state-transaction',id:crypto.randomBytes(16).toString('hex'),files:images};
     encodedSize(journal,MAX_JOURNAL_BYTES);await this.writeFile(JOURNAL_FILE,journal,MAX_JOURNAL_BYTES);
@@ -177,7 +217,9 @@ class Store {
   }
   async readLocked(now) {
     await this.recover();
-    const config=await this.readFile('config.json',defaultConfig);
+    let config=await this.readFile('config.json',defaultConfig);
+    const wasProtected=record(config)&&config.schemaVersion===3;
+    if(wasProtected)config=await this.openConfig(config);
     const dictionary=await this.readFile('personal-dictionary.json',defaultDictionary);
     const candidates=validateCandidates(await this.readFile(CANDIDATES_FILE,defaultCandidates));
     const images={};
@@ -186,6 +228,10 @@ class Store {
       config.revision=bump(config.revision);config.cacheEpoch=bump(config.cacheEpoch);images['config.json']=config;
     }
     validateConfig(config);
+    if(!wasProtected&&Object.values(config.providers).some(profile=>profile.apiKey)){
+      if(!own(images,'config.json')){config.revision=bump(config.revision);config.cacheEpoch=bump(config.cacheEpoch);}
+      images['config.json']=config;
+    }
     if(record(dictionary)&&dictionary.schemaVersion===1) {
       validateDictionary(dictionary,1);dictionary.schemaVersion=2;dictionary.revision=bump(dictionary.revision);
       for(const item of Object.values(dictionary.entries))if(item.source==='ai')item.source='legacy-ai';

@@ -1,8 +1,8 @@
 # 项目状态与代码说明
 
-更新日期：2026-11-03（Asia/Shanghai）。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次改动。日常使用命令见 [README.md](README.md)，英文说明见 [README_EN.md](README_EN.md)。
+更新日期：2026-11-05（Asia/Shanghai）。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次改动。日常使用命令见 [README.md](README.md)，英文说明见 [README_EN.md](README_EN.md)。
 
-Windows 管理器开发已建立 [M0 基线与开发约定](docs/development/M0-baseline.md) 和 [阶段进度](docs/development/PROGRESS.md)：固定在 `feat/DragonGirl` 开发，每阶段记录、提交、打附注标签并等待用户审核。M0、M1 已获批准，M2 已完成、待审核，M3 未开始。接入实测见 [M1 记录](docs/development/M1-real-integration.md)，当前回归和交审状态见 [M2 记录](docs/development/M2-dictionary-review.md)；历史计数保留各自日期语境。
+Windows 管理器开发已建立 [M0 基线与开发约定](docs/development/M0-baseline.md) 和 [阶段进度](docs/development/PROGRESS.md)：固定在 `feat/DragonGirl` 开发，每阶段记录、提交、打附注标签并等待用户审核。M0–M2 已获批准，M3 已完成、待审核。接入实测见 [M1 记录](docs/development/M1-real-integration.md)，当前回归和交审状态见 [M3 记录](docs/development/M3-unified-manager.md)；历史计数保留各自日期语境。
 
 ## 0. DragonGirl 开发版增量与验证边界
 
@@ -16,7 +16,7 @@ Windows 管理器开发已建立 [M0 基线与开发约定](docs/development/M0-
 
 Windows 隔离副本已实测受控未命中的成功／失败／关闭、导航返回、设置页边界、设置工具关闭时运行、归档恢复与解包重建，以及同一应用和窗口内的服务恢复。受控提供方返回本地固定译文，没有调用真实外部 AI。源码更新不会自行改动日常安装；应用新 profile 需要另行对明确目标执行汉化。阶段交审不代表发布或用户已批准。
 
-- 默认关闭 AI；新结果先进入七天候选，采纳才写入个人词典，拒绝持续抑制直到解除。原生菜单不接 AI。密钥仍按明文存储，DPAPI 属于 M3。
+- 默认关闭 AI；新结果先进入七天候选，采纳才写入个人词典，拒绝持续抑制直到解除。原生菜单不接 AI。M3 使用 Windows 当前用户 DPAPI，含密钥配置迁移为磁盘 schema3，旧运行时拒绝新格式。
 - 当前优先级为个人词典 → 内置词典／规则 → 有效候选 → AI；内置四组数据已抽离到 JSON，保留 M1 旧定义的有效值与顺序。
 - schema2 迁移保留手工及历史 AI 词条，后者标为 legacy-ai 而不自动过期；多文件审核通过共享锁和恢复 journal 提交。本轮没有迁移日常数据或更新日常安装。
 - 用户目录独立于安装和还原范围；JSON 版本、跨进程锁、原子替换、删除记录防止覆盖/复活旧词条。
@@ -56,11 +56,14 @@ Python 源码集中在 `src/` 的两个目录：`localization/` 保存原作者�
 
 | 文件 | 职责与主要入口 |
 | --- | --- |
+| [antigravity_manager](antigravity_manager/) | PySide6 管理界面、后台任务、统一配置／词典／审核／安装服务及 JSON CLI |
+| [src/localization/installation_service.py](src/localization/installation_service.py) | 共用安装检测、汉化、还原和启动；结构化步骤／状态，不解析控制台日志 |
+| [src/localization/credential_protection.py](src/localization/credential_protection.py) / [localization_runtime/credentials.cjs](localization_runtime/credentials.cjs) | Windows 当前用户 DPAPI；跨语言保护与解锁，不回退明文 |
 | [src/localization/Antigravity-Patcher.py](src/localization/Antigravity-Patcher.py) | 翻译词典、DOM/菜单注入代码，以及 `apply_patch()` 汉化流程；`main()` 解析 CLI |
 | [src/localization/Restore.py](src/localization/Restore.py) | `restore()` 验证原版归档、切换应用状态、清除汉化目录；`main()` 处理 CLI 和失败状态 |
 | [src/localization/antigravity_common.py](src/localization/antigravity_common.py) | 安装目录发现、ASAR 校验/提取、入口验证、受限范围删除，以及目标安装的进程控制 |
 | [src/localization/Translation-Settings.py](src/localization/Translation-Settings.py) | 独立 Tkinter 设置 GUI、个人词典编辑与显式连接测试 |
-| [src/localization/translation_service.py](src/localization/translation_service.py) | 不含凭据的结构化词典／审核接口，供 CLI 与后续管理器共用 |
+| [src/localization/translation_service.py](src/localization/translation_service.py) | 不含凭据的结构化词典／审核及 JSON 导入导出接口，供 CLI 与管理器共用 |
 | [src/localization/Translation-Dictionary.py](src/localization/Translation-Dictionary.py) | 词典列表、个人覆盖、恢复默认、候选采纳／拒绝／解除和清理 CLI |
 | [src/localization/builtin_dictionary.py](src/localization/builtin_dictionary.py) | 读取并验证随包内置数据，保持源码和冻结资源定位 |
 | [src/localization/translation_config.py](src/localization/translation_config.py) | 用户数据路径、配置/词典校验、跨进程锁与原子保存 |

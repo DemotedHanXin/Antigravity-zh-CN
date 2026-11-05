@@ -10,7 +10,8 @@ import unittest
 from unittest.mock import patch
 
 from source_paths import LOCALIZATION
-from translation_config import ConflictError, UserStore
+from translation_config import ConflictError
+from credential_fixture import UserStore
 from translation_service import DictionaryService
 
 

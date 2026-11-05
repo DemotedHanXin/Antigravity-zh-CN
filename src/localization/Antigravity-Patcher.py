@@ -379,7 +379,7 @@ MENU_TRANSLATOR_INJECTION = _render_builtin_data(MENU_TRANSLATOR_INJECTION, _bui
 del _builtin_catalog
 
 
-def append_once(file_path, content, marker, name):
+def append_once(file_path, content, marker, name, log=print):
     if not os.path.exists(file_path):
         raise ValueError(f"缺少必需汉化文件：{file_path}")
     
@@ -387,7 +387,7 @@ def append_once(file_path, content, marker, name):
         existing = f.read()
     
     if marker in existing:
-        print(f"[状态] 发现已存在的 {name}，正在热更新词典...")
+        log(f"[状态] 发现已存在的 {name}，正在热更新词典...")
         idx = existing.find("// " + marker)
         if idx == -1:
             idx = existing.find(marker)
@@ -395,25 +395,25 @@ def append_once(file_path, content, marker, name):
             clean_content = existing[:idx].rstrip()
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(clean_content + "\n" + content + "\n")
-            print(f"[成功] 词典热更新完成：{name} ({os.path.basename(file_path)})")
+            log(f"[成功] 词典热更新完成：{name} ({os.path.basename(file_path)})")
         return
     
     with open(file_path, "a", encoding="utf-8") as f:
         f.write("\n" + content + "\n")
-    print(f"[成功] 注入完成：{name} ({os.path.basename(file_path)})")
+    log(f"[成功] 注入完成：{name} ({os.path.basename(file_path)})")
 
-def replace_in_file(file_path, target, replacement):
+def replace_in_file(file_path, target, replacement, log=print):
     if not os.path.exists(file_path):
         return
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
     if replacement in content:
-        print(f"[跳过] 目标已替换 ({os.path.basename(file_path)})")
+        log(f"[跳过] 目标已替换 ({os.path.basename(file_path)})")
         return
     content = content.replace(target, replacement)
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(content)
-    print(f"[成功] 执行目标替换 ({os.path.basename(file_path)})")
+    log(f"[成功] 执行目标替换 ({os.path.basename(file_path)})")
 
 REQUIRED_PATCH_FILES = ('dist/preload.js', 'dist/menu.js', 'dist/tray.js')
 
@@ -429,16 +429,16 @@ def build_dom_injection(profile=None):
     return DOM_TRANSLATOR_INJECTION.split(marker, 1)[0] + preload_extension(profile) + '\n})();\n'
 
 
-def _inject(stage, resources_root=None):
+def _inject(stage, resources_root=None, log=print):
     # Match pristine, validated stage bytes before any localization changes.
     profile = select_profile(stage, resources_root=resources_root)
     dom_injection = build_dom_injection(profile)
     append_once(stage / 'dist/preload.js', dom_injection,
-                'Antigravity Chinese Localization Engine', 'Web UI Injection')
+                'Antigravity Chinese Localization Engine', 'Web UI Injection', log=log)
     append_once(stage / 'dist/menu.js', MENU_TRANSLATOR_INJECTION,
-                'Antigravity Chinese Localization Engine - Menu', 'Menu Translator Injection')
-    replace_in_file(stage / 'dist/tray.js', "'Show Antigravity'", "'显示 Antigravity'")
-    replace_in_file(stage / 'dist/tray.js', "'Quit'", "'退出'")
+                'Antigravity Chinese Localization Engine - Menu', 'Menu Translator Injection', log=log)
+    replace_in_file(stage / 'dist/tray.js', "'Show Antigravity'", "'显示 Antigravity'", log=log)
+    replace_in_file(stage / 'dist/tray.js', "'Quit'", "'退出'", log=log)
     loading = stage / 'dist/loadingOverlay.js'
     if loading.is_file():
         content = loading.read_text(encoding='utf-8')
@@ -446,9 +446,9 @@ def _inject(stage, resources_root=None):
                            encoding='utf-8')
     if profile is not None:
         prepare_bridge(stage, profile)
-        print('[状态] 已安装经过精确指纹验证的 DragonGirl 桥接；AI 仍由用户配置控制。')
+        log('[状态] 已安装经过精确指纹验证的 DragonGirl 桥接；AI 仍由用户配置控制。')
     else:
-        print('[状态] 当前应用尚无已验证的 AI 桥接配置；仅启用现有词典汉化，不外发文案。')
+        log('[状态] 当前应用尚无已验证的 AI 桥接配置；仅启用现有词典汉化，不外发文案。')
 
 
 def _stamp(path):
@@ -456,8 +456,9 @@ def _stamp(path):
     return info.st_size, info.st_mtime_ns, info.st_ino
 
 
-def apply_patch(app_dir=None, no_launch=True):
+def apply_patch(app_dir=None, no_launch=True, log=print, event=None):
     """Apply localization without launching; no_launch is kept for compatibility."""
+    emit = event if event is not None else lambda step, status: None
     root = discover_install(app_dir)
     resources = resources_dir(root)
     archive = resources / 'app.asar'
@@ -468,8 +469,8 @@ def apply_patch(app_dir=None, no_launch=True):
     source = archive if archive.is_file() else disabled
     if not source.is_file():
         raise ValueError('未找到可验证的原始 app.asar 或 app.asar.disabled；已保留现有 app 目录。')
-    print('[安装目录] ' + str(root))
-    print('[执行] 从原始归档完整解包并校验外置依赖，准备汉化工作目录...')
+    log('[安装目录] ' + str(root))
+    log('[执行] 从原始归档完整解包并校验外置依赖，准备汉化工作目录...')
     before = _stamp(source)
     stage = Path(tempfile.mkdtemp(prefix='.antigravity-localization-stage-', dir=str(resources)))
     previous = None
@@ -482,13 +483,15 @@ def apply_patch(app_dir=None, no_launch=True):
     try:
         extract_asar(source, stage, unpacked_dir=resources / 'app.asar.unpacked')
         validate_extracted_app(stage, REQUIRED_PATCH_FILES)
-        _inject(stage, resources_root=resources)
+        _inject(stage, resources_root=resources, log=log)
         validate_extracted_app(stage, REQUIRED_PATCH_FILES)
         prepared = True
+        emit('prepare', 'completed')
         if _stamp(source) != before:
             raise RuntimeError('准备期间原始归档发生变化，未切换安装。请关闭更新程序后重试。')
-        print('[执行] 汉化文件校验通过，正在关闭当前安装的 Antigravity...')
+        log('[执行] 汉化文件校验通过，正在关闭当前安装的 Antigravity...')
         stop_application(root)
+        emit('stop', 'completed')
         if _stamp(source) != before or (source == archive and disabled.exists()) or (source == disabled and archive.exists()):
             raise RuntimeError('安装文件在切换前发生变化，未修改当前入口。')
         switch_started = True
@@ -507,6 +510,7 @@ def apply_patch(app_dir=None, no_launch=True):
             archive.rename(disabled)
             moved_archive = True
         committed = True
+        emit('activate', 'completed')
     except BaseException:
         if not switch_started:
             # Preparation / process-stop failures may only discard staging.
@@ -553,6 +557,7 @@ def apply_patch(app_dir=None, no_launch=True):
                 except (OSError, KeyboardInterrupt) as error:
                     preserve_stage = True
                     rollback_errors.append('请保留待恢复的完整工作目录：' + str(stage) + '；' + str(error))
+        emit('rollback', 'incomplete' if rollback_errors else 'completed')
         if rollback_errors:
             raise RuntimeError('汉化切换中断，部分回退未完成；请勿删除原始归档或保留目录。\\n' + '\\n'.join(rollback_errors))
         raise
@@ -564,7 +569,8 @@ def apply_patch(app_dir=None, no_launch=True):
             remove_tree(previous, resources)
         except (OSError, ValueError) as error:
             raise RuntimeError('汉化已生效，但旧工作目录未清理完成：' + str(previous) + '；' + str(error))
-    print('[完成] 汉化文件与主入口校验通过；原始归档保留为 app.asar.disabled，用于还原。')
+    emit('cleanup', 'completed')
+    log('[完成] 汉化文件与主入口校验通过；原始归档保留为 app.asar.disabled，用于还原。')
     return True
 
 
@@ -572,7 +578,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='安全汉化 Antigravity：完整校验归档与依赖后切换，失败保留原始程序。')
     parser.add_argument('--app-dir', help='安装目录；macOS 指定 Antigravity.app')
     parser.add_argument('--no-launch', action='store_true', help='兼容旧命令；汉化完成后始终只输出结果，不自动启动软件')
+    parser.add_argument('--json', action='store_true', help='返回与管理器共用的结构化结果；须显式指定安装目录')
     args = parser.parse_args(argv)
+    if args.json:
+        from installation_service import InstallationService
+        result = InstallationService().execute('apply', app_dir=args.app_dir, confirmed=True)
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result['ok'] else 1
     try:
         apply_patch(args.app_dir, args.no_launch)
         return 0

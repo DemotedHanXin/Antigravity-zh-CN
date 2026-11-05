@@ -5,6 +5,7 @@ Lock contract shared with localization_runtime/storage.cjs: exclusive mkdir of
 .translation.lock; owner.json is diagnostic only. Never steal a stale lock.
 """
 import copy
+import base64
 import datetime
 import json
 import ipaddress
@@ -18,6 +19,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from urllib.parse import urlsplit
+from credential_protection import CredentialError, WindowsProtector
 
 PROVIDERS = ('openai', 'gemini', 'claude', 'compatible')
 DEFAULT_URLS = {
@@ -245,10 +247,63 @@ def _bump(value):
 
 
 class UserStore:
-    def __init__(self, directory=None, lock_timeout=2.0, clock=None):
+    def __init__(self, directory=None, lock_timeout=2.0, clock=None, protector=None):
         self.directory = Path(directory) if directory is not None else user_data_dir()
         self.lock_timeout = lock_timeout
         self.clock = clock or (lambda: time.time_ns() // 1_000_000)
+        self.protector = protector if protector is not None else WindowsProtector()
+
+    def _open_config(self, value, decrypt=True):
+        """Disk v3 is separate from the v2 in-memory API consumed by callers."""
+        if not isinstance(value, dict) or value.get('schemaVersion') != 3:
+            return validate_config(value)
+        _header(value, version=3)
+        result = copy.deepcopy(value)
+        result['schemaVersion'] = 2
+        if result.pop('credentialProtection', None) != 'windows-dpapi-v1':
+            raise DataError('密钥保护格式无效；原文件已保留。')
+        if not isinstance(result.get('providers'), dict) or set(result['providers']) != set(PROVIDERS):
+            raise DataError('提供商配置不完整。')
+        for profile in result['providers'].values():
+            if not isinstance(profile, dict) or set(profile) != {'baseUrl', 'model', 'apiKeyProtected'}:
+                raise DataError('密钥保护格式无效；原文件已保留。')
+            protected = profile.pop('apiKeyProtected')
+            if not isinstance(protected, str) or len(protected) > 32768:
+                raise DataError('密钥保护内容无效；原文件已保留。')
+            try:
+                if base64.b64encode(base64.b64decode(protected, validate=True)).decode('ascii') != protected:
+                    raise ValueError()
+            except ValueError:
+                raise DataError('密钥保护内容无效；原文件已保留。') from None
+            try:
+                profile['apiKey'] = self.protector.unprotect(protected) if protected and decrypt else ('protected' if protected else '')
+            except CredentialError:
+                raise DataError('无法使用当前 Windows 用户解锁密钥；原文件已保留。') from None
+        return validate_config(result)
+
+    def _seal_config(self, value):
+        if value.get('schemaVersion') == 3:
+            self._open_config(value, decrypt=False)
+            return value
+        validate_config(value)
+        if not any(profile['apiKey'] for profile in value['providers'].values()):
+            return value
+        result = {name: copy.deepcopy(value[name]) for name in default_config()}
+        result.update(schemaVersion=3, credentialProtection='windows-dpapi-v1')
+        for name, profile in value['providers'].items():
+            try:
+                protected = self.protector.protect(profile['apiKey']) if profile['apiKey'] else ''
+            except CredentialError:
+                raise DataError('无法使用当前 Windows 用户保护密钥；未写入明文。') from None
+            result['providers'][name] = dict(baseUrl=profile['baseUrl'], model=profile['model'], apiKeyProtected=protected)
+        self._open_config(result, decrypt=False)
+        return result
+
+    def _seal_images(self, images):
+        result = copy.deepcopy(images)
+        if 'config.json' in result:
+            result['config.json'] = self._seal_config(result['config.json'])
+        return result
 
     def _now(self, value=None):
         value = self.clock() if value is None else value
@@ -361,7 +416,7 @@ class UserStore:
     def _validate_images(self, images):
         if not isinstance(images, dict) or not images or not set(images).issubset(STATE_FILES):
             raise DataError('恢复事务包含不支持的路径。')
-        validators = dict(zip(STATE_FILES, (validate_config, validate_dictionary, validate_candidates)))
+        validators = dict(zip(STATE_FILES, (lambda value: self._open_config(value, decrypt=False), validate_dictionary, validate_candidates)))
         for name, value in images.items():
             validators[name](value)
             self._encoded(value)
@@ -388,11 +443,18 @@ class UserStore:
                 or any(char not in '0123456789abcdef' for char in journal['id'])):
             raise DataError('恢复事务无效；文件已保留。')
         self._validate_images(journal['files'])
+        if journal['files'].get('config.json', {}).get('schemaVersion') == 3:
+            self._open_config(journal['files']['config.json'])
+        protected = self._seal_images(journal['files'])
+        if protected != journal['files']:
+            journal['files'] = protected
+            self._write(JOURNAL_FILE, journal, MAX_JOURNAL_BYTES)
         self._apply_images(journal['files'])
 
     def _commit(self, images):
         if not images:
             return
+        images = self._seal_images(images)
         self._validate_images(images)
         journal = dict(schemaVersion=1, kind='dragongirl-state-transaction', id=uuid.uuid4().hex, files=images)
         self._encoded(journal, MAX_JOURNAL_BYTES)
@@ -409,6 +471,9 @@ class UserStore:
     def _read_state_locked(self, now):
         self._recover()
         config = self._read('config.json', default_config, lambda value: value)
+        was_protected = isinstance(config, dict) and config.get('schemaVersion') == 3
+        if was_protected:
+            config = self._open_config(config)
         dictionary = self._read('personal-dictionary.json', default_dictionary, lambda value: value)
         candidates = self._read(CANDIDATES_FILE, default_candidates, validate_candidates)
         images = {}
@@ -420,6 +485,11 @@ class UserStore:
             config['cacheEpoch'] = _bump(config['cacheEpoch'])
             images['config.json'] = config
         validate_config(config)
+        if not was_protected and any(profile['apiKey'] for profile in config['providers'].values()):
+            if 'config.json' not in images:
+                config['revision'] = _bump(config['revision'])
+                config['cacheEpoch'] = _bump(config['cacheEpoch'])
+            images['config.json'] = config
         if isinstance(dictionary, dict) and dictionary.get('schemaVersion') == 1:
             validate_dictionary(dictionary, version=1)
             dictionary['schemaVersion'] = 2

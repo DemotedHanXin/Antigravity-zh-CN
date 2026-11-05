@@ -1,0 +1,2 @@
+# QtCore, QtGui and QtWidgets; no Qt Addons are required.
+PySide6-Essentials==6.8.3

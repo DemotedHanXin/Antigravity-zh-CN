@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs/promises');const os=require('node:os');const path=require('node:path');const {EventEmitter}=require('node:events');
-const P=require('../../localization_runtime/providers.cjs');const S=require('../../localization_runtime/storage.cjs');const M=require('../../localization_runtime/main.cjs');const {probe}=require('../../localization_runtime/probe.cjs');
+const P=require('../../localization_runtime/providers.cjs');const S=require('../credential_fixture.cjs');const M=require('../../localization_runtime/main.cjs');const {probe}=require('../../localization_runtime/probe.cjs');
 const items=[{id:'one',text:'Open settings',safeContextKind:'settings'}];
 const profile={baseUrl:'https://api.example.com/v1',apiKey:'fake-test-key',model:'test-model'};
 const translated=JSON.stringify([{id:'one',text:'打开设置'}]);
@@ -40,7 +40,7 @@ test('symlink storage rejected',async(t)=>{
 });
 test('new AI results enter candidates without changing personal entries or extending expiry',async(t)=>{
  const store=await tempStore(t),config=enabledConfig(),dictionary=S.defaultDictionary();dictionary.entries.Save={translation:'保存',source:'manual',updatedAt:'now',context:'ui'};dictionary.tombstones.Delete=0;
- await writeState(store,config,dictionary);const guard={configRevision:1,dictionaryRevision:0,epochs:{Save:0,Delete:0,'New label':0}},now=1000;
+ await writeState(store,config,dictionary);const now=1000,state=await store.read(now),guard={configRevision:state.config.revision,dictionaryRevision:0,epochs:{Save:0,Delete:0,'New label':0}};
  assert.equal((await store.saveCandidates([{source:'New label',translation:'新标签'}],{...guard,dictionaryRevision:9},now)).saved.length,0);
  const saved=await store.saveCandidates([{source:'Save',translation:'储存'},{source:'Delete',translation:'删除'},{source:'New label',translation:'新标签'}],guard,now);
  assert.deepEqual(saved.saved.map(row=>row.source),['Delete','New label']);

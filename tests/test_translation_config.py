@@ -13,6 +13,7 @@ from unittest import mock
 
 from source_paths import LOCALIZATION
 import translation_config as config
+from credential_fixture import UserStore
 
 SPEC = importlib.util.spec_from_file_location('translation_settings', LOCALIZATION / 'Translation-Settings.py')
 GUI = importlib.util.module_from_spec(SPEC)
@@ -23,7 +24,7 @@ class TranslationConfigTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.directory = Path(self.temporary.name) / 'user'
-        self.store = config.UserStore(self.directory, lock_timeout=0.1)
+        self.store = UserStore(self.directory, lock_timeout=0.1)
 
     def tearDown(self):
         self.temporary.cleanup()
@@ -130,7 +131,7 @@ class TranslationConfigTests(unittest.TestCase):
         linked = Path(self.temporary.name) / 'linked'
         linked.symlink_to(self.directory, target_is_directory=True)
         with self.assertRaises(config.DataError):
-            config.UserStore(linked).read_config()
+            UserStore(linked).read_config()
         path = self.directory / 'config.json'
         path.unlink()
         path.symlink_to(Path(self.temporary.name) / 'absent')
@@ -179,7 +180,7 @@ class TranslationConfigTests(unittest.TestCase):
         errors = []
         def write(index):
             try:
-                config.UserStore(self.directory, lock_timeout=3).set_entry('Entry ' + str(index), '条目 ' + str(index))
+                UserStore(self.directory, lock_timeout=3).set_entry('Entry ' + str(index), '条目 ' + str(index))
             except Exception as error:
                 errors.append(error)
         threads = [threading.Thread(target=write, args=(index,)) for index in range(8)]
@@ -198,15 +199,13 @@ class TranslationConfigTests(unittest.TestCase):
         self.assertEqual(updated['providers'], initial['providers'])
         self.assertEqual(updated['revision'], initial['revision'] + 1)
 
-    def test_gui_save_requires_plaintext_confirmation(self):
+    def test_gui_save_uses_protection_without_plaintext_confirmation(self):
         controller = GUI.SettingsController(self.store)
         draft = controller.reload()
         draft['providers']['openai']['apiKey'] = 'test-only-placeholder'
-        with self.assertRaises(config.DataError):
-            controller.save(draft)
-        self.assertFalse(self.directory.exists())
-        controller.save(draft, plaintext_confirmed=True)
+        controller.save(draft)
         self.assertEqual(self.store.read_config()['revision'], 1)
+        self.assertNotIn('test-only-placeholder', (self.directory / 'config.json').read_text())
 
     def test_gui_cancel_reload_does_not_save_draft(self):
         controller = GUI.SettingsController(self.store)
@@ -263,7 +262,7 @@ class TranslationConfigTests(unittest.TestCase):
         value['providers']['openai'].update(model='fixture-model', apiKey='test-only-placeholder')
         value = self.store.save_config(value)
         root = Path(__file__).resolve().parents[1]
-        script = """const {Store}=require('./localization_runtime/storage.cjs');
+        script = """const {Store}=require('./tests/credential_fixture.cjs');
         (async()=>{const s=new Store(process.argv[1]);const x=await s.read();
         if(!x.config.enabled||x.dictionary.revision!==0)throw Error('bad read');
         const saved=await s.saveCandidates([{source:'Open fixture',translation:'打开样例'}],
@@ -281,7 +280,7 @@ class TranslationConfigTests(unittest.TestCase):
         deleted = self.store.delete_entry('Open fixture')
         # A persistent rejection, independently of a deletion tombstone, blocks AI.
         self.store.reject_candidate('Open fixture', self.store.read_candidates()['revision'])
-        script = """const {Store}=require('./localization_runtime/storage.cjs');
+        script = """const {Store}=require('./tests/credential_fixture.cjs');
         (async()=>{const s=new Store(process.argv[1]);const x=await s.read();
         const saved=await s.saveCandidates([{source:'Open fixture',translation:'错误恢复'}],
           {configRevision:x.config.revision,dictionaryRevision:x.dictionary.revision,

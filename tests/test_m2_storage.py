@@ -12,6 +12,7 @@ from unittest import mock
 
 from source_paths import ROOT
 import translation_config as config
+from credential_fixture import UserStore
 
 NOW = 1700000000000
 
@@ -21,7 +22,7 @@ class M2StorageTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix='m2-storage-')
         self.addCleanup(self.temp.cleanup)
         self.directory = Path(self.temp.name) / 'user'
-        self.store = config.UserStore(self.directory, lock_timeout=0.1, clock=lambda: NOW)
+        self.store = UserStore(self.directory, lock_timeout=0.1, clock=lambda: NOW)
 
     def seed(self, legacy=False):
         self.directory.mkdir()
@@ -52,7 +53,7 @@ class M2StorageTests(unittest.TestCase):
     def node(self, body, payload=None):
         if not shutil.which('node'):
             self.skipTest('Node required for cross-language storage validation')
-        module = json.dumps(str(ROOT / 'localization_runtime/storage.cjs'))
+        module = json.dumps(str(ROOT / 'tests/credential_fixture.cjs'))
         script = 'const S=require(' + module + ');const input=JSON.parse(process.argv[2]);' + \
             'const store=new S.Store(process.argv[1],{clock:()=>input.now});' + \
             '(async()=>{' + body + '})().catch(error=>{process.stderr.write(error.code||error.message);process.exitCode=1;});'
@@ -153,7 +154,7 @@ class M2StorageTests(unittest.TestCase):
         def clock():
             clock_read.set()
             return current[0]
-        waiting = config.UserStore(self.directory, lock_timeout=3, clock=clock)
+        waiting = UserStore(self.directory, lock_timeout=3, clock=clock)
         outcomes = []
         def accept():
             try:
@@ -188,7 +189,7 @@ class M2StorageTests(unittest.TestCase):
         self.candidate()
         expiry = NOW + config.CANDIDATE_TTL_MS
         current = [expiry - 1]
-        store = config.UserStore(self.directory, clock=lambda: current[0])
+        store = UserStore(self.directory, clock=lambda: current[0])
         original = store._read_state_locked
         def delayed_read(now):
             state = original(now)
@@ -201,6 +202,7 @@ class M2StorageTests(unittest.TestCase):
 
     def test_capacity_tracks_union_so_expiry_cannot_overflow_source_epochs(self):
         self.seed()
+        self.store.read_state()  # Complete credential migration before capacity testing.
         candidates = config.default_candidates()
         candidates['epochs'] = {f'Old {index}': 1 for index in range(9999)}
         candidates['entries']['Label'] = dict(translation='候选', createdAt=NOW,
@@ -233,6 +235,7 @@ class M2StorageTests(unittest.TestCase):
     def test_node_rolls_forward_interrupted_python_accept_without_double_revision(self):
         self.seed()
         self.candidate()
+        self.store.read_state()  # Inject failure into acceptance, not prior migration.
         original = self.store._write
         def fail(name, *args):
             if name == config.CANDIDATES_FILE:
@@ -269,7 +272,7 @@ class M2StorageTests(unittest.TestCase):
         with mock.patch.object(self.store, '_write', side_effect=fail):
             with self.assertRaises(OSError):
                 self.store.read_state()
-        self.assertEqual(json.loads((self.directory / 'config.json').read_text())['schemaVersion'], 2)
+        self.assertEqual(json.loads((self.directory / 'config.json').read_text())['schemaVersion'], 3)
         self.assertEqual(json.loads((self.directory / 'personal-dictionary.json').read_text())['schemaVersion'], 1)
         state = self.node('process.stdout.write(JSON.stringify(await store.read(input.now)));')
         self.assertEqual(state['config']['revision'], 5)

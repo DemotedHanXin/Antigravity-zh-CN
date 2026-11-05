@@ -27,8 +27,8 @@ class SettingsController:
         if self.config is None:
             raise DataError('请先成功加载现有配置；不会覆盖损坏文件。')
         validate_config(draft)
-        if any(profile['apiKey'] for profile in draft['providers'].values()) and not plaintext_confirmed:
-            raise DataError('保存密钥前须明确确认明文保存风险。')
+        # Compatibility argument retained for old callers; storage now protects
+        # credentials with Windows current-user DPAPI, never plaintext fallback.
         self.config = self.store.save_config(draft, expected_revision=self.config['revision'])
         return copy.deepcopy(self.config)
 
@@ -68,6 +68,9 @@ PROBE_STATUSES = {
     'proxy_configuration_error': '代理配置读取失败或不受支持，请使用本机 HTTP/混合端口，关闭 PAC。',
     'proxy_connection_failed': '无法通过代理建立连接，请检查代理客户端、端口和线路。',
     'proxy_authentication_required': '代理要求身份认证，请使用无需认证的本机 HTTP/混合端口。',
+    'credential_protection_failed': '无法使用当前 Windows 用户解锁密钥；请核对账户和配置文件。',
+    'credential_protection_unavailable': '密钥保护不可用；此版本需要 Windows 当前用户环境。',
+    'invalid_credentials': '已保存的密钥保护数据无效；原文件已保留。',
     'unavailable': '连接测试不可用，请检查 Node 和运行时资源。',
 }
 
@@ -124,7 +127,7 @@ def main():
             outer = ttk.Frame(root, padding=12)
             outer.pack(fill='both', expand=True)
             ttk.Label(outer, text='AI 默认关闭。开启后，仅筛选的界面文案会发给所选提供商，并可能产生费用。', wraplength=800).pack(anchor='w')
-            ttk.Label(outer, text='密钥按明文保存在当前用户目录；不等于加密。请勿共享文件或使用公共账户。', wraplength=800).pack(anchor='w')
+            ttk.Label(outer, text='密钥使用 Windows 当前用户保护；其他账户无法直接解锁。统一管理器入口：python -m antigravity_manager', wraplength=800).pack(anchor='w')
             ttk.Label(outer, text='数据目录：' + str(self.controller.store.directory), wraplength=800).pack(anchor='w', pady=(3, 8))
             notebook = ttk.Notebook(outer)
             notebook.pack(fill='both', expand=True)
@@ -252,11 +255,7 @@ def main():
             def operation():
                 self.capture()
                 validate_config(self.draft)
-                has_keys = any(item['apiKey'] for item in self.draft['providers'].values())
-                if has_keys and not messagebox.askyesno('确认明文保存密钥', '密钥将以明文保存在所示用户目录。文件或账户泄露可能造成费用损失。确认保存？', parent=self.root):
-                    self.status.set('已取消；未保存。')
-                    return
-                self.draft = self.controller.save(self.draft, plaintext_confirmed=has_keys)
+                self.draft = self.controller.save(self.draft)
                 self.status.set('配置已保存；这不代表应用桥接已经验证或连接测试通过。')
             self.perform(operation)
 
