@@ -57,6 +57,7 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Replace With New": "替换为新建", "Replace with New": "替换为新建", "Replace with new": "替换为新建",
     "Copy Link": "复制链接", "Copy link": "复制链接", "Copy ID": "复制 ID", "Copy id": "复制 ID",
     "Copy Path": "复制路径",
+    "Path copied!": "路径已复制！",
     "Copy Project Name": "复制项目名称", "Project Settings": "项目设置",
     "Show in File Explorer": "在文件资源管理器中显示",
     "Copy Conversation ID": "复制对话 ID", "Copy Conversation Link": "复制对话链接", "Duplicate Conversation": "复制对话",
@@ -158,6 +159,16 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Google Antigravity Terms of Service": "Google Antigravity 服务条款", "Google Privacy Policy": "Google 隐私权政策",
 
     // General Settings Page
+    "Welcome to Antigravity": "欢迎使用 Antigravity", "Continue with Google": "使用 Google 账号继续",
+    "Use Business Account": "使用企业账号", "Having trouble signing in?": "登录遇到问题？",
+    "Business Account Sign In": "企业账号登录", "Continue with Google Cloud": "使用 Google Cloud 继续",
+    "Use Advanced SSO Config": "使用高级 SSO 配置", "WIF Config": "WIF 配置",
+    "Use this if your admin gave you a WIF config. Paste it below to sign in.": "如果管理员向您提供了 WIF 配置，请使用此方式。将配置粘贴到下方即可登录。",
+    "Use this if your admin gave you a WIF config.": "如果管理员向您提供了 WIF 配置，请使用此方式。",
+    "Paste it below to sign in.": "将配置粘贴到下方即可登录。",
+    "E.g. locations/global/workforcePools...": "例如：locations/global/workforcePools...",
+    "E.g. locations/global/workforcePools…": "例如：locations/global/workforcePools...",
+    "Sign In with SSO": "使用 SSO 登录",
     "General": "常规", "Appearance": "外观", "Theme": "主题", "Light": "浅色", "Dark": "深色",
     "Language": "语言", "Version": "版本", "Check for Updates": "检查更新", "About": "关于",
     "No updates available": "暂无可用更新",
@@ -183,6 +194,11 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Terms of Service": "服务条款",
     "Remote Agents Data": "远程智能体数据",
     "Delete All Remote Agents Data": "删除所有远程智能体数据", "Delete All Data": "删除所有数据",
+    "Delete All Remote Agents Data?": "删除所有远程智能体数据？",
+    "This permanently deletes all of your Remote Agents conversations, projects, scheduled tasks, connected plugins and settings, and stops any running remote agents. It can't be undone. Data in the desktop app and your Google account are not affected, and you can keep using Remote Agents afterwards.": "此操作将永久删除您的所有远程智能体对话、项目、计划任务、已连接的插件和设置，并停止所有正在运行的远程智能体。此操作无法撤销。桌面应用及 Google 账号中的数据不受影响，之后您仍可继续使用远程智能体。",
+    "This permanently deletes all of your Remote Agents conversations, projects, scheduled tasks, connected plugins and settings, and stops any running remote agents.": "此操作将永久删除您的所有远程智能体对话、项目、计划任务、已连接的插件和设置，并停止所有正在运行的远程智能体。",
+    "It can't be undone.": "此操作无法撤销。",
+    "Data in the desktop app and your Google account are not affected, and you can keep using Remote Agents afterwards.": "桌面应用及 Google 账号中的数据不受影响，之后您仍可继续使用远程智能体。",
     "Permanently delete your remote conversations, projects, scheduled tasks, connected plugins and settings. Data in the desktop app and your Google account are not affected.": "永久删除您的远程对话、项目、计划任务、已连接的插件和设置。桌面应用及 Google 账号中的数据不受影响。",
     "永久删除your remote conversations, projects, scheduled tasks, connected plugins and settings. Data in the desktop app and your Google account are not affected.": "永久删除您的远程对话、项目、计划任务、已连接的插件和设置。桌面应用及 Google 账号中的数据不受影响。",
     "Permanently delete your remote conversations, projects, scheduled tasks, connected plugins and settings.": "永久删除您的远程对话、项目、计划任务、已连接的插件和设置。",
@@ -212,6 +228,7 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Global Permissions": "全局权限", "Global permissions": "全局权限",
     "Tool Permissions": "工具权限", "Tool permissions": "工具权限",
     "Modify permissions for file, terminal, and MCP tools.": "修改文件、终端和 MCP 工具的权限。",
+    "Modify permissions for file and terminal tools.": "修改文件和终端工具的权限。",
     "Modify permissions for file, terminal, and MCP tools": "修改文件、终端和 MCP 工具的权限",
     "Default": "默认", "Always Ask": "总是询问", "Always Proceed": "自动执行",
     "Inherit Global": "继承全局", "Inherits Global": "继承全局", "inherit global": "继承全局",
@@ -415,6 +432,9 @@ DOM_TRANSLATOR_INJECTION = r"""
     // Shortcuts Panel
     "Configure keyboard shortcuts.": "配置键盘快捷键。",
     "Edit Shortcut": "编辑快捷键",
+    "Remove Shortcut": "移除快捷键", "Add Shortcut": "添加快捷键",
+    "Press keys...": "请按下快捷键...", "Press keys…": "请按下快捷键...",
+    "No keyboard shortcuts found matching your filter.": "未找到符合筛选条件的快捷键。",
     "Search shortcuts...": "搜索快捷键...", "Search shortcuts…": "搜索快捷键…",
     "Keyboard shortcuts for quick navigation and control.": "用于快速导航和控制的键盘快捷键。",
     "RECOMMENDED": "推荐", "NAVIGATION": "导航", "Recommended": "推荐", "Navigation": "导航",
@@ -442,9 +462,39 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Steps to reproduce the issue": "重现问题的步骤", "Expected behavior": "预期行为",
     "Actual behavior": "实际行为", "Any error messages": "任何错误消息", "Any relevant information": "任何相关信息",
     "Describe the bug you encountered...": "描述您遇到的错误...",
+    "Describe the bug you encountered…": "描述您遇到的错误...",
+    "Please describe the feature you'd like to see. The more detailed the requirements, the easier it will be for our team to incorporate your ideas. Some helpful information includes:": "请描述您希望增加的功能。需求描述越详细，我们的团队就越容易实现您的想法。建议提供以下信息：",
+    "Please describe the feature you'd like to see.": "请描述您希望增加的功能。",
+    "The more detailed the requirements, the easier it will be for our team to incorporate your ideas.": "需求描述越详细，我们的团队就越容易实现您的想法。",
+    "Some helpful information includes:": "建议提供以下信息：",
+    "What is missing in your workflow": "您的工作流程中缺少什么",
+    "What you would like to see to address this gap in your workflow": "您希望增加哪些功能来弥补工作流程中的不足",
+    "How this feature would help you and other users": "这项功能将如何帮助您和其他用户",
+    "Describe the feature you would like to see...": "描述您希望增加的功能...",
+    "Describe the feature you would like to see…": "描述您希望增加的功能...",
+    "Please describe your auth or billing issue. More details will help our support team resolve your issue quicker. Some helpful information includes:": "请描述您遇到的身份验证或计费问题。提供更多细节有助于支持团队更快地解决问题。建议提供以下信息：",
+    "Please describe your auth or billing issue.": "请描述您遇到的身份验证或计费问题。",
+    "More details will help our support team resolve your issue quicker.": "提供更多细节有助于支持团队更快地解决问题。",
+    "What quota or feature is being incorrectly limited": "哪项配额或功能被错误限制",
+    "What functionality you expect your account tier to have available that is missing": "您认为当前账号套餐应包含、但实际缺失的功能",
+    "Any error messages seen when trying to log in": "尝试登录时出现的错误信息",
+    "Describe your auth or billing issue...": "描述您遇到的身份验证或计费问题...",
+    "Describe your auth or billing issue…": "描述您遇到的身份验证或计费问题...",
+    "Use this form if you cannot connect to Remote Control. If your instance is already connected and you are experiencing issues in the browser, report directly from the Remote Control web page so that relevant logs are included. Some helpful information includes:": "如果无法连接远程控制，请使用此表单。如果您的实例已连接，但在浏览器中遇到问题，请直接通过远程控制网页反馈，以便附带相关日志。建议提供以下信息：",
+    "Use this form if you cannot connect to Remote Control.": "如果无法连接远程控制，请使用此表单。",
+    "If your instance is already connected and you are experiencing issues in the browser, report directly from the Remote Control web page so that relevant logs are included.": "如果您的实例已连接，但在浏览器中遇到问题，请直接通过远程控制网页反馈，以便附带相关日志。",
+    "Whether it never connects or is intermittent/flaky": "是始终无法连接，还是连接时断时续、不稳定",
+    "Did restarting the desktop app help?": "重启桌面应用后是否有所改善？",
+    "Describe your Remote Control issue...": "描述您遇到的远程控制问题...",
+    "Describe your Remote Control issue…": "描述您遇到的远程控制问题...",
+    "For any feedback that does not fit into the above categories.": "适用于不属于上述类别的其他反馈。",
+    "Enter your feedback here...": "在此输入您的反馈...", "Enter your feedback here…": "在此输入您的反馈...",
     "Steps to Reproduce": "重现步骤", "Please list the steps to reproduce the issue...": "请列出重现问题的步骤...",
     "Please list the steps to reproduce the issue": "请列出重现问题的步骤",
     "Attach a screenshot (optional)": "附加截图（可选）", "Attach Antigravity server logs": "附加 Antigravity 服务器日志",
+    "We recommend attaching logs. Attaching logs will help the Antigravity team act on and prioritize your feedback.": "建议附加日志。日志有助于 Antigravity 团队处理您的反馈，并确定处理优先级。",
+    "We recommend attaching logs.": "建议附加日志。",
+    "Attaching logs will help the Antigravity team act on and prioritize your feedback.": "日志有助于 Antigravity 团队处理您的反馈，并确定处理优先级。",
     "We'd love to hear from you.": "我们期待您的反馈。", "How can we improve?": "我们该如何改进？",
     "Thinking...": "思考中...", "Thought": "思考过程", "Agent is thinking...": "智能体正在思考...",
     "Show thought process": "显示思考过程", "Hide thought process": "隐藏思考过程",
@@ -586,6 +636,26 @@ DOM_TRANSLATOR_INJECTION = r"""
   };
 
   const voicePresetNames = new Set(['Fola', 'Arlo', 'Cleo', 'Finn', 'Gero', 'Lora', 'Neno', 'Olin', 'Tari']);
+
+  const projectDeletionPromptRules = [
+    {
+      pattern: /^(Are you sure you want to delete the\s+(?:[Pp]roject|项目)\s+|确定要删除项目“)([\s\S]+?)(”吗？|\?|？)$/,
+      prefix: '确定要删除项目“', suffix: '”吗？'
+    },
+    {
+      pattern: /^(This will permanently delete\s+|这将永久删除其中的\s*)(\d+)(\s*(?:active conversations?|个进行中的对话)\s+within it\.|\s*个进行中的对话。)$/,
+      prefix: '这将永久删除其中的 ', suffix: ' 个进行中的对话。'
+    }
+  ];
+  const projectDeletionValueOwners = new WeakMap();
+
+  function matchProjectDeletionPrompt(text) {
+    for (const rule of projectDeletionPromptRules) {
+      const match = text.match(rule.pattern);
+      if (match) return {prefix: rule.prefix, suffix: rule.suffix, value: match[2], offset: match[1].length};
+    }
+    return null;
+  }
 
   const inlineNoticeRules = [
     {
@@ -901,6 +971,10 @@ DOM_TRANSLATOR_INJECTION = r"""
     }
     
     // Dynamic Regex Translations
+    const deletionPrompt = matchProjectDeletionPrompt(trimmed);
+    if (deletionPrompt) {
+      return text.replace(trimmed, () => deletionPrompt.prefix + deletionPrompt.value + deletionPrompt.suffix);
+    }
     let m;
     if ((m = trimmed.match(/^(?:Voice chat|语音对话)(\s*·\s*)((?:\d{1,2}:){1,2}\d{2})(\s*·\s*)(\d+(?:\.\d+)?)s$/))) {
       return text.replace(trimmed, () => "语音对话" + m[1] + m[2] + m[3] + m[4] + " 秒");
@@ -1187,6 +1261,45 @@ DOM_TRANSLATOR_INJECTION = r"""
     return false;
   }
 
+  function translateProjectDeletionPrompt(el) {
+    if (!el || !el.querySelectorAll || el.tagName === 'BODY' || el.tagName === 'HTML') return false;
+    const raw = el.textContent || '';
+    const text = raw.trim();
+    if (!/^(?:Are you sure you want to delete the|确定要删除项目“|This will permanently delete|这将永久删除其中的)/.test(text)) return false;
+    const prompt = matchProjectDeletionPrompt(text);
+    if (!prompt) return false;
+    const protectedContent = 'pre, code, .monaco-editor, textarea, input, script, style, [contenteditable="true"]';
+    if ((el.closest && el.closest(protectedContent)) || el.querySelector(protectedContent)) return false;
+    const start = raw.length - raw.trimStart().length + prompt.offset;
+    const end = start + prompt.value.length;
+    const nodes = [];
+    const collect = node => {
+      if (node.nodeType === Node.TEXT_NODE) nodes.push(node);
+      else Array.from(node.childNodes || []).forEach(collect);
+    };
+    collect(el);
+    const groups = [[], [], []];
+    let offset = 0;
+    for (const node of nodes) {
+      const next = offset + node.textContent.length;
+      if (next <= start) groups[0].push(node);
+      else if (offset >= end) groups[2].push(node);
+      else if (offset >= start && next <= end) groups[1].push(node);
+      else return false;
+      offset = next;
+    }
+    if (groups.some(group => !group.length)) return false;
+    // Keep React's variable nodes and their formatting; replace only surrounding wording.
+    groups[1].forEach(node => projectDeletionValueOwners.set(node, el));
+    for (const [index, target] of [[0, prompt.prefix], [2, prompt.suffix]]) {
+      groups[index].forEach((node, textIndex) => {
+        const translated = textIndex === 0 ? target : '';
+        if (node.textContent !== translated) node.textContent = translated;
+      });
+    }
+    return true;
+  }
+
   function translateVoiceChatDuration(node) {
     if (!/^(?:\d+(?:\.\d+)?)?s$/.test(node.textContent.trim())) return false;
     let container = node.parentElement;
@@ -1463,6 +1576,11 @@ DOM_TRANSLATOR_INJECTION = r"""
         return;
       }
       if (node.parentElement) {
+        const deletionOwner = projectDeletionValueOwners.get(node);
+        if (deletionOwner && deletionOwner.contains(node) && translateProjectDeletionPrompt(deletionOwner)) return;
+        if (deletionOwner) projectDeletionValueOwners.delete(node);
+        if (translateProjectDeletionPrompt(node.parentElement) ||
+            (node.parentElement.parentElement && translateProjectDeletionPrompt(node.parentElement.parentElement))) return;
         if (translateArchiveRestore(node) || translateVoiceChatDuration(node)) return;
         if (translateArchiveToast(node.parentElement) ||
             (node.parentElement.parentElement && translateArchiveToast(node.parentElement.parentElement))) return;
@@ -1490,6 +1608,7 @@ DOM_TRANSLATOR_INJECTION = r"""
       if (node.closest && node.closest('.monaco-editor, [contenteditable="true"]')) return;
       const textArea = node.tagName === 'TEXTAREA';
       if (!textArea) {
+        translateProjectDeletionPrompt(node);
         translateArchiveToast(node);
         translateInlineNotice(node);
         translateConnectorCount(node);
@@ -1529,6 +1648,8 @@ DOM_TRANSLATOR_INJECTION = r"""
         });
       } else if (mutation.type === 'characterData') {
         processNode(mutation.target);
+      } else if (mutation.type === 'attributes') {
+        processNode(mutation.target);
       }
     });
   });
@@ -1538,7 +1659,9 @@ DOM_TRANSLATOR_INJECTION = r"""
     observer.observe(document.body, {
       childList: true,
       subtree: true,
-      characterData: true
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['placeholder', 'title', 'aria-label']
     });
   });
 })();

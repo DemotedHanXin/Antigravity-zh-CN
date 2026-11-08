@@ -180,6 +180,25 @@ class TranslationEngineTests(unittest.TestCase):
                                        '0 archived conversations'),
                          ['1 个进行中的对话和 12 个已归档对话。', '0 个已归档对话'])
 
+    def test_project_delete_dialog_preserves_names_counts_and_mixed_labels(self):
+        names = ['Antigravity_Work', '中文 项目', "Release $& $` $' $1", 'Settings']
+        originals, expected = [], []
+        for name in names:
+            originals.extend([f'Are you sure you want to delete the project {name}?',
+                              f'Are you sure you want to delete the 项目 {name}?'])
+            expected.extend([f'确定要删除项目“{name}”吗？'] * 2)
+        for count in [0, 1, 2, 57]:
+            noun = 'conversation' if count == 1 else 'conversations'
+            originals.extend([f'This will permanently delete {count} active {noun} within it.',
+                              f'This will permanently delete {count} 个进行中的对话 within it.'])
+            expected.extend([f'这将永久删除其中的 {count} 个进行中的对话。'] * 2)
+        self.assertEqual(self.translate(*originals), expected)
+        self.assertEqual(self.translate(*expected), expected)
+        unrelated = ['Are you sure you want to delete the file sample.txt?',
+                     'This will permanently delete 2 files within it.',
+                     'This will permanently delete -1 active conversations within it.']
+        self.assertEqual(self.translate(*unrelated), unrelated)
+
     def test_voice_records_preserve_time_separators_and_duration_values(self):
         originals = ['Voice chat · 17:00 · 9s', 'Voice chat·9:05·0s',
                      '语音对话 · 23:59:01 · 91.5s', ' \nVoice chat · 08:15 · 120s\t']
