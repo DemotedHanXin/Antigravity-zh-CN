@@ -8,7 +8,7 @@
 - **当前分支作者与维护者**：[DemotedHanXin](https://github.com/DemotedHanXin)（Git 提交名 `Demoted_Han_Xin`）。本分支基于上游继续完善翻译、安装校验与还原保护、Windows 代理启动和快捷方式管理，并规划图形界面。
 - **许可关系**：上游与当前分支均使用 MIT 许可证。新增贡献沿用该许可，保留上游的版权声明和来源，不将上游成果重新署名为当前作者独立创作。
 
-当前可运行功能位于 `src/`。`doc/design/` 中的 Windows 应用计划、预览图和 HTML 原型属于设计交付，不能视为已经实现的 GUI 功能。
+命令行核心位于 `src/`；Windows 图形助手位于 `app/`，根目录 `main.py` 启动。`doc/design/` 的 HTML/PNG 仍为设计参考，实际 Qt 实现与验证状态见 `doc/PROJECT_STATUS.md`。
 
 ## 反馈问题
 
@@ -35,7 +35,7 @@
 
 ## 改进翻译
 
-在 `src/Antigravity-Patcher.py` 的注入代码中修改 `dictionary`；动态计数、跨节点提示和菜单翻译还涉及对应规则。当前没有独立的运行时 JSON 词典或可用的图形词典编辑器。
+在 `src/Antigravity-Patcher.py` 的注入代码中修改 `dictionary`；动态计数、跨节点提示和菜单翻译还涉及对应规则。GUI 通过 `app/resources/builtin-dictionary.json` 展示普通词条，通过用户 JSON 覆盖层编辑；一致性测试确保内置 JSON 与 CLI 字典一致。更改内置普通词条时同步更新目录 JSON，动态规则仍只在共享引擎中维护。
 
 - 准确表达原文，保持简洁、自然，同一术语使用同一译法。
 - 优先限定完整文案或明确的 UI 上下文，避免宽泛替换污染代码、用户输入或用户生成内容。

@@ -91,13 +91,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 """
 
 
-def run_dom_check(case, fixtures, checks):
+def run_dom_check(case, fixtures, checks, injection=None):
     """Run renderer checks with a disposable profile and the actual injected engine."""
-    module = ast.parse((ROOT / 'src/Antigravity-Patcher.py').read_text(encoding='utf-8'))
-    injection = next(ast.literal_eval(statement.value) for statement in module.body
-                     if isinstance(statement, ast.Assign) and any(
-                         isinstance(target, ast.Name) and target.id == 'DOM_TRANSLATOR_INJECTION'
-                         for target in statement.targets))
+    if injection is None:
+        module = ast.parse((ROOT / 'src/Antigravity-Patcher.py').read_text(encoding='utf-8'))
+        injection = next(ast.literal_eval(statement.value) for statement in module.body
+                         if isinstance(statement, ast.Assign) and any(
+                             isinstance(target, ast.Name) and target.id == 'DOM_TRANSLATOR_INJECTION'
+                             for target in statement.targets))
     with tempfile.TemporaryDirectory(prefix='.dom-translation-test-', dir=ROOT) as temporary:
         work = Path(temporary).resolve()
         case.assertEqual(work.parent, ROOT)
