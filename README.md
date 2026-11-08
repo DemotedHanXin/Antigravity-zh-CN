@@ -4,14 +4,35 @@
 
 为 Antigravity 桌面端提供中文界面补丁、汉化还原，以及 Windows 代理启动与快捷方式管理。运行脚本使用 Python 标准库，不需要安装 pip 依赖。
 
-当前可用的是 **Python 命令行工具**。Windows 图形界面仍处于[规划与设计阶段](doc/design/README.md)，HTML 原型使用示例数据。翻译覆盖与兼容性取决于 Antigravity 版本和文件结构；旧版可执行程序不会自动包含当前源码的改动。
+当前提供 **Windows 图形助手（测试版）和 Python 命令行工具**。图形助手包含安装检查、汉化/恢复、999 条普通词条的可视化管理和代理入口预览/配置/清理。设计素材见 [设计目录](doc/design/README.md)。翻译覆盖与兼容性取决于 Antigravity 版本和文件结构，实际验证边界见 [项目状态](doc/PROJECT_STATUS.md)。
+
+## Windows 图形助手
+
+使用本次本地构建：打开 `dist/AntigravityZhCN/AntigravityZhCN.exe`，或解压 `dist/AntigravityZhCN-0.1.0-windows-x64.zip` 后打开其中 EXE；请保留旁边的 `_internal` 文件夹。不需要安装 Python 或 Node.js。安装器与构建说明见 [packaging/README.md](packaging/README.md)。这些是本地测试产物，未签名、未发布 Release。
+
+从源码启动（Windows x64，已验证 Python 3.12.10）：
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-app.txt
+.\.venv\Scripts\python.exe main.py
+```
+
+可用 `main.py --app-dir "D:\Apps\Antigravity"` 明确选择安装，`--data-dir` 指定独立助手数据目录。`--smoke-test` 使用临时数据验证窗口及打包依赖后退出，不检查或修改真实安装。
+
+- 概览中先选择安装，文件结构检查通过后预览并应用汉化；确认前保存 Antigravity 工作。汉化与恢复结束后不自动启动。
+- 词典支持中英文搜索、添加、修改、禁用、恢复内置，以及 JSON 导入冲突预览、保留/覆盖选择、导出。动态规则只读。保存后需要重新应用汉化。
+- 代理页面先预览，再按已核对的计划修复或移除入口；计划发生变化会停止并要求重新预览。不更改系统代理设置，配置完成不等于网络连通。
+- 恢复与帮助提供恢复英文、会话详情、脱敏诊断导出，以及日夜主题、插画和文字大小设置。
+
+偏好和个人词典默认位于 `%LOCALAPPDATA%/AntigravityZhCN/`。词典原子保存，损坏文件保留并提供从有效 JSON 恢复入口；多个助手窗口保存冲突会提示重开。升级或卸载助手保留个人词典，也不会替用户撤销 Antigravity 的汉化或代理配置。
 
 ## 项目来源与作者
 
 | 角色 | 作者 | 仓库与工作范围 |
 | --- | --- | --- |
 | 上游原作者 | [MIMICTE](https://github.com/MIMICTE) 及上游贡献者 | [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN)，提供原始汉化项目 |
-| 当前分支作者与维护者 | [DemotedHanXin](https://github.com/DemotedHanXin)（Git 提交名 `Demoted_Han_Xin`） | [DemotedHanXin/Antigravity-zh-CN](https://github.com/DemotedHanXin/Antigravity-zh-CN)，在上游基础上扩展翻译、安装校验与还原保护、Windows 代理启动和快捷方式管理，并规划图形界面 |
+| 当前分支作者与维护者 | [DemotedHanXin](https://github.com/DemotedHanXin)（Git 提交名 `Demoted_Han_Xin`） | [DemotedHanXin/Antigravity-zh-CN](https://github.com/DemotedHanXin/Antigravity-zh-CN)，在上游基础上扩展翻译、安装校验与还原保护、Windows 代理启动和快捷方式管理，并实现 Windows 图形助手 |
 
 本仓库是上游项目的派生分支（fork），保留上游贡献与署名。上游及当前分支均使用 MIT 许可证，具体关系见本文末尾。它是社区维护的辅助工具，与 Antigravity 官方产品的发布和支持相互独立。
 

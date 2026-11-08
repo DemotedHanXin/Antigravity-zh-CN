@@ -4,14 +4,34 @@ English | [简体中文](README.md)
 
 Chinese UI localization, restoration, and Windows proxy launcher / shortcut management for Antigravity Desktop. Runtime scripts use the Python standard library; no pip packages are required.
 
-The available implementation is a set of **Python command-line tools**. The Windows GUI is still in the [planning and design stage](doc/design/README.md), and the HTML prototype uses sample data. Translation coverage and compatibility depend on the Antigravity version and file layout. Older executables do not automatically include changes to the current source.
+The project provides a **Windows desktop assistant (test build) and Python command-line tools**. The native GUI supports installation checks, localization/restoration, 999 ordinary dictionary entries, and proxy shortcut preview/setup/removal. Translation coverage depends on the Antigravity version and layout. See [project status](doc/PROJECT_STATUS.md) for verified results and limitations.
+
+## Windows desktop assistant
+
+Open `dist/AntigravityZhCN/AntigravityZhCN.exe`, or extract the locally built `dist/AntigravityZhCN-0.1.0-windows-x64.zip` and run its EXE. Keep the `_internal` folder alongside it. The package includes Python and Qt; Node.js is not required. See [Windows packaging](packaging/README.md) for installers and build commands. Local test artifacts are unsigned and have not been published as a Release.
+
+Source startup (Windows x64, tested with Python 3.12.10):
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements-app.txt
+.\.venv\Scripts\python.exe main.py
+```
+
+Use `--app-dir` to select an installation, `--data-dir` for isolated user data, or `--smoke-test` to verify startup with temporary data without inspecting/modifying a real installation.
+
+The four pages cover installation status/localization, dictionary search and editing, proxy preview/setup/removal, and restoration/help. Save work in Antigravity before applying or restoring. Neither operation launches Antigravity automatically. Dictionary saves remain pending until reapplied; the installed revision and content hash are checked independently. Import previews offer explicit keep-local/overwrite choices. Dynamic rules are read-only.
+
+Proxy changes require a preview; changed plans stop before execution. Configuration status does not claim network connectivity. Session details remain in memory and diagnostics export only allowed, redacted metadata. Light/dark/system themes, optional artwork and font sizes are available.
+
+Settings and personal dictionaries live in `%LOCALAPPDATA%/AntigravityZhCN/`. Atomic writes preserve invalid files and reject stale-window saves. Upgrading or uninstalling the assistant preserves these files and does not revert the target application's localization or proxy setup.
 
 ## Project origin and authors
 
 | Role | Author | Repository and scope |
 | --- | --- | --- |
 | Original upstream author | [MIMICTE](https://github.com/MIMICTE) and upstream contributors | [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN), the original localization project |
-| Current fork author and maintainer | [DemotedHanXin](https://github.com/DemotedHanXin) (Git author name: `Demoted_Han_Xin`) | [DemotedHanXin/Antigravity-zh-CN](https://github.com/DemotedHanXin/Antigravity-zh-CN), extending translations, installation validation and restoration safeguards, Windows proxy launchers and shortcut management, with a planned GUI |
+| Current fork author and maintainer | [DemotedHanXin](https://github.com/DemotedHanXin) (Git author name: `Demoted_Han_Xin`) | [DemotedHanXin/Antigravity-zh-CN](https://github.com/DemotedHanXin/Antigravity-zh-CN), extending translations, installation validation and restoration safeguards, Windows proxy launchers and shortcut management, and a native Windows GUI |
 
 This repository is a fork of the upstream project and retains its attribution. Both upstream and this fork use the MIT License; see the licensing section below. This community tool is maintained independently of the official Antigravity product and its support.
 

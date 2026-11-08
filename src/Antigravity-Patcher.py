@@ -1,5 +1,7 @@
 # coding: utf-8
 import argparse
+import hashlib
+import json
 import os
 from pathlib import Path
 import re
@@ -585,6 +587,7 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Turn on Remote Control in app settings": "请在应用设置中开启“远程控制”"
   };
 
+  Object.setPrototypeOf(dictionary, null);
   const voicePresetNames = new Set(['Fola', 'Arlo', 'Cleo', 'Finn', 'Gero', 'Lora', 'Neno', 'Olin', 'Tari']);
 
   const inlineNoticeRules = [
@@ -643,6 +646,7 @@ DOM_TRANSLATOR_INJECTION = r"""
   };
 
   // Verified marketplace descriptions; match the full text or an unambiguous truncated prefix.
+  Object.setPrototypeOf(coreWords, null);
   const marketplaceDescriptionRules = [
     // Canva
     ["Create, edit, review, resize, and brand-check Canva designs with the Canva MCP server.","通过 Canva MCP 服务器创建、编辑、审阅 Canva 设计，调整尺寸并检查品牌规范。"],
@@ -1566,6 +1570,7 @@ MENU_TRANSLATOR_INJECTION = r"""
     'Split': '分屏', 'Split Right': '向右分屏', 'Split Down': '向下分屏',
     'Replace With New': '替换为新建', 'Replace with New': '替换为新建'
   };
+  Object.setPrototypeOf(menuTranslationMap, null);
   function translateMenu(menuItem) {
     if (menuItem.label && menuTranslationMap[menuItem.label]) {
       menuItem.label = menuTranslationMap[menuItem.label];
@@ -1635,10 +1640,130 @@ def replace_in_file(file_path, target, replacement):
 REQUIRED_PATCH_FILES = ('dist/preload.js', 'dist/menu.js', 'dist/tray.js')
 
 
-def _inject(stage):
-    append_once(stage / 'dist/preload.js', DOM_TRANSLATOR_INJECTION,
+def build_injections(dictionary_snapshot=None):
+    """Serialize exact-text user data into the existing protected translators.
+
+    The CLI without overrides retains its standalone standard-library behavior.
+    GUI snapshots are validated again here before any installation is touched.
+    """
+    if dictionary_snapshot is None:
+        return DOM_TRANSLATOR_INJECTION, MENU_TRANSLATOR_INJECTION
+    from app.dictionary import validate_document
+    snapshot = validate_document(dictionary_snapshot)
+    maps = {scope: [[e['source'], e['target'] if e['enabled'] else None]
+                    for e in snapshot['entries'] if e['scope'] == scope]
+            for scope in ('ui', 'menu')}
+    # A JSON string parsed as data, then a Map, handles __proto__, quotes and
+    # arbitrary literal replacement text without producing executable snippets.
+    def js_data(value):
+        return 'JSON.parse(' + json.dumps(json.dumps(value, ensure_ascii=True)) + ')'
+    helpers = r'''
+  const customTranslations = new Map(__CUSTOM_DATA__);
+  const customTextStates = new WeakMap();
+  const customElementStates = new WeakMap();
+  const customAttributeStates = new WeakMap();
+  function customTranslation(text) {
+    if (typeof text !== 'string') return undefined;
+    const trimmed = text.trim();
+    const key = customTranslations.has(trimmed) ? trimmed : trimmed.replace(/\s+/g, ' ');
+    if (customTranslations.has(key)) {
+      const value = customTranslations.get(key);
+      return value === null ? text : text.replace(trimmed, () => value);
+    }
+    return undefined;
+  }
+  function applyCustomElement(el) {
+    if (!customTranslations.size || !el || typeof el.textContent !== 'string') return false;
+    const cached = customElementStates.get(el) === el.textContent;
+    const replacement = cached ? el.textContent : customTranslation(el.textContent);
+    if (replacement === undefined) { customElementStates.delete(el); return false; }
+    const protectedSelector = 'pre,code,textarea,input,script,style,.monaco-editor,[contenteditable="true"]';
+    if ((el.closest && el.closest(protectedSelector)) ||
+        (el.querySelector && el.querySelector(protectedSelector))) return false;
+    if (replacement === el.textContent) {
+      customElementStates.set(el, replacement);
+      return true;
+    }
+    // An exact override must not flatten links or rename nested actions.
+    if (el.querySelector && el.querySelector('a,button,[role="link"],[role="button"]')) return false;
+    const texts = [];
+    function collect(node) {
+      if (node.nodeType === Node.TEXT_NODE) texts.push(node);
+      else Array.from(node.childNodes || []).forEach(collect);
+    }
+    collect(el);
+    if (!texts.length) return false;
+    texts[0].textContent = replacement;
+    texts.slice(1).forEach(node => { node.textContent = ''; });
+    customElementStates.set(el, replacement);
+    texts.forEach(node => customTextStates.set(node, node.textContent));
+    return true;
+  }
+  function applyCustomAncestors(node) {
+    if (!customTranslations.size) return false;
+    const ancestors = [];
+    let parent = node.parentElement;
+    while (parent) {
+      ancestors.push(parent);
+      parent = parent.parentElement;
+    }
+    return ancestors.reverse().some(applyCustomElement);
+  }
+  function translateCustomAttribute(node, name, value) {
+    let state = customAttributeStates.get(node);
+    if (!state) { state = Object.create(null); customAttributeStates.set(node, state); }
+    if (Object.hasOwn(state, name) && state[name] === value) return value;
+    const custom = customTranslation(value);
+    if (custom !== undefined) { state[name] = custom; return custom; }
+    delete state[name];
+    return translateText(value);
+  }
+'''.replace('__CUSTOM_DATA__', js_data(maps['ui']))
+    dom = DOM_TRANSLATOR_INJECTION.replace('  function translateText(text) {', helpers + '\n  function translateText(text) {', 1)
+    dom = dom.replace('    if (!trimmed) return text;',
+                      '    if (!trimmed) return text;\n    const custom = customTranslation(text);\n    if (custom !== undefined) return custom;', 1)
+    dom = dom.replace('      if (node.parentElement) {\n        if (translateArchiveRestore',
+                      '      if (node.parentElement) {\n        if (applyCustomAncestors(node)) return;\n'
+                      '        if (customTextStates.get(node) === node.textContent) return;\n'
+                      '        customTextStates.delete(node);\n'
+                      '        const custom = customTranslation(node.textContent);\n'
+                      '        if (custom !== undefined) { customTextStates.set(node, custom); if (custom !== node.textContent) node.textContent = custom; return; }\n'
+                      '        if (translateArchiveRestore', 1)
+    dom = dom.replace("      const textArea = node.tagName === 'TEXTAREA';",
+                      "      const customElement = applyCustomElement(node);\n      const textArea = node.tagName === 'TEXTAREA';", 1)
+    dom = dom.replace('      if (!textArea) {', '      if (!textArea && !customElement) {', 1)
+    dom = dom.replace('      if (!textArea) Array.from(node.childNodes).forEach(processNode);',
+                      '      if (!textArea && !customElement) Array.from(node.childNodes).forEach(processNode);', 1)
+    for name in ('placeholder', 'title'):
+        dom = dom.replace('translateText(node.' + name + ')',
+                          "translateCustomAttribute(node, '" + name + "', node." + name + ')')
+    dom = dom.replace('translateText(ariaLabel)', "translateCustomAttribute(node, 'aria-label', ariaLabel)")
+    menu = MENU_TRANSLATOR_INJECTION.replace('  function translateMenu(menuItem) {',
+        '  const customMenuTranslations = new Map(' + js_data(maps['menu']) + ');\n'
+        '  const customMenuStates = new WeakMap();\n'
+        '  function translateMenu(menuItem) {\n'
+        , 1)
+    menu = menu.replace(
+        '    if (menuItem.label && menuTranslationMap[menuItem.label]) {\n'
+        '      menuItem.label = menuTranslationMap[menuItem.label];\n'
+        '    }',
+        '    if (customMenuStates.get(menuItem) !== menuItem.label) {\n'
+        '      if (customMenuTranslations.has(menuItem.label)) {\n'
+        '        const value = customMenuTranslations.get(menuItem.label);\n'
+        '        if (value !== null) menuItem.label = value;\n'
+        '        customMenuStates.set(menuItem, menuItem.label);\n'
+        '      } else if (menuItem.label && menuTranslationMap[menuItem.label]) {\n'
+        '        menuItem.label = menuTranslationMap[menuItem.label];\n'
+        '      }\n'
+        '    }', 1)
+    return dom, menu
+
+
+def _inject(stage, dictionary_snapshot=None):
+    dom, menu = build_injections(dictionary_snapshot)
+    append_once(stage / 'dist/preload.js', dom,
                 'Antigravity Chinese Localization Engine', 'Web UI Injection')
-    append_once(stage / 'dist/menu.js', MENU_TRANSLATOR_INJECTION,
+    append_once(stage / 'dist/menu.js', menu,
                 'Antigravity Chinese Localization Engine - Menu', 'Menu Translator Injection')
     replace_in_file(stage / 'dist/tray.js', "'Show Antigravity'", "'显示 Antigravity'")
     replace_in_file(stage / 'dist/tray.js', "'Quit'", "'退出'")
@@ -1669,8 +1794,11 @@ def _stamp(path):
     return info.st_size, info.st_mtime_ns, info.st_ino
 
 
-def apply_patch(app_dir=None, no_launch=True):
+def apply_patch(app_dir=None, no_launch=True, dictionary_snapshot=None):
     """Apply localization without launching; no_launch is kept for compatibility."""
+    if dictionary_snapshot is not None:
+        from app.dictionary import validate_document
+        dictionary_snapshot = validate_document(dictionary_snapshot)
     root = discover_install(app_dir)
     resources = resources_dir(root)
     archive = resources / 'app.asar'
@@ -1695,7 +1823,18 @@ def apply_patch(app_dir=None, no_launch=True):
     try:
         extract_asar(source, stage, unpacked_dir=resources / 'app.asar.unpacked')
         validate_extracted_app(stage, REQUIRED_PATCH_FILES)
-        _inject(stage)
+        if dictionary_snapshot is None:
+            _inject(stage)
+        else:
+            _inject(stage, dictionary_snapshot)
+        snapshot = dictionary_snapshot or {'schemaVersion': 1, 'revision': 0, 'entries': []}
+        marker = {
+            'schemaVersion': 1,
+            'dictionaryRevision': snapshot['revision'],
+            'dictionaryHash': hashlib.sha256(json.dumps(snapshot, ensure_ascii=False, sort_keys=True,
+                separators=(',', ':')).encode('utf-8')).hexdigest(),
+        }
+        (stage / '.antigravity-zhcn.json').write_text(json.dumps(marker), encoding='utf-8')
         validate_extracted_app(stage, REQUIRED_PATCH_FILES)
         prepared = True
         if _stamp(source) != before:
