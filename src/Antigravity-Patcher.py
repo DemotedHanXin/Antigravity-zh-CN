@@ -2,6 +2,7 @@
 import argparse
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,7 @@ DOM_TRANSLATOR_INJECTION = r"""
     "History": "历史记录", "Settings": "设置", "System": "系统", "Network": "网络",
     "Model": "模型", "Memory": "记忆", "Tools": "工具", "Agents": "智能体",
     "Overview": "概览", "Logs": "日志", "Clear": "清除", "Save": "保存",
+    "Customize Sections": "自定义分区", "Documents": "文档", "Links": "链接",
     "Cancel": "取消", "Submit": "提交", "Run": "运行", "Stop": "停止",
     "Edit": "编辑", "Delete": "删除", "Add": "添加", "Remove": "移除", "Download": "下载",
     "Monthly Limit": "每月限额", "Weekly Limit": "每周限额", "Five Hour Limit": "五小时限额",
@@ -29,6 +31,8 @@ DOM_TRANSLATOR_INJECTION = r"""
     "limit": "限额", "limits": "限额", "weekly": "每周", "hourly": "每小时",
     "Sidebar": "侧边栏", "Display Options": "显示选项", "Message input": "消息输入框", "Record voice memo": "录制语音备忘",
     "Typeahead menu": "预输入菜单", "Group By": "分组方式", "Last Updated": "最后更新", "Last Prompt": "最新提示词", "Last prompt": "最新提示词",
+    "Sort Projects": "项目排序", "Custom Order": "自定义顺序", "Repo": "仓库",
+    "Display": "显示", "Auto Pin": "自动置顶", "Archived Only": "仅显示已归档",
     "Alphabetical (A-Z)": "字母顺序 (A-Z)", "Alphabetical (Z-A)": "字母倒序 (Z-A)", "Date Added": "添加日期", "Creation Date": "创建日期", "Created Date": "创建日期", "Subtitles": "副标题", "No Subtitle": "无副标题",
     "Filter": "筛选", "Scheduled": "已计划", "Environment": "环境", "None": "无", "Fast": "快速",
     "Last 7 days": "最近 7 天", "Last 24 hours": "最近 24 小时", "Last 30 days": "最近 30 天", "Last 3 months": "最近 3 个月",
@@ -39,19 +43,32 @@ DOM_TRANSLATOR_INJECTION = r"""
     "No project found": "暂无项目", "No project found.": "暂无项目",
     "found": "找到", "not found": "未找到", "Not found": "未找到",
     "Search projects": "搜索项目", "Search projects...": "搜索项目...",
+    "Search Projects": "搜索项目", "Search Projects...": "搜索项目...", "Search Projects…": "搜索项目…",
     "Workspace": "工作区", "workspace": "工作区", "Minimize": "最小化", "Maximize": "最大化", "Back": "返回",
     "Folders": "文件夹", "folders": "文件夹", "including": "包括",
     "Rename": "重命名", "Mark Unread": "标记为未读", "Mark Read": "标记为已读", "Duplicate": "制作副本",
+    "Mark All as Read": "全部标为已读",
     "Export": "导出", "Import": "导入", "Pin": "置顶", "Archive": "归档",
+    "Conversation Archived": "对话已归档", "Conversation Unarchived": "对话已取消归档",
+    "This chat is archived.": "此对话已归档。", "Undo": "撤销",
+    "View archived in the sidebar ( menu).": "在侧边栏的筛选菜单中查看已归档对话。",
+    "View archived in the sidebar (menu).": "在侧边栏的筛选菜单中查看已归档对话。",
     "Split": "分屏", "Split Right": "向右分屏", "Split Down": "向下分屏", "Split Left": "向左分屏", "Split Up": "向上分屏",
     "Replace With New": "替换为新建", "Replace with New": "替换为新建", "Replace with new": "替换为新建",
     "Copy Link": "复制链接", "Copy link": "复制链接", "Copy ID": "复制 ID", "Copy id": "复制 ID",
+    "Copy Path": "复制路径",
+    "Copy Project Name": "复制项目名称", "Project Settings": "项目设置",
+    "Show in File Explorer": "在文件资源管理器中显示",
     "Copy Conversation ID": "复制对话 ID", "Copy Conversation Link": "复制对话链接", "Duplicate Conversation": "复制对话",
     "Close Others": "关闭其他", "Close All": "全部关闭", "Close to the Right": "关闭右侧", "Close Saved": "关闭已保存",
     "Create New Project": "创建新项目", "Archive Conversation": "归档对话", "now": "刚刚",
     "Conversation Name": "对话名称", "Conversation ID": "对话 ID", "Project Name": "项目名称",
+    "Set Project Name": "设置项目名称",
+    "Enter project name...": "输入项目名称...", "Enter project name…": "输入项目名称…",
     "Toggle Auxiliary Pane": "切换辅助面板", "Maximize Pane": "最大化面板", "Minimize Pane": "最小化面板", "Restore Pane": "还原面板",
     "Files Changed": "已修改文件", "Files changed": "已修改文件", "File Changed": "已修改文件",
+    "Modified Files": "已修改文件", "No changes to review": "暂无待审阅的更改",
+    "No file changes": "暂无文件更改", "Hide Whitespace Changes": "隐藏空白字符更改",
     "Uploads": "已上传文件", "uploads": "已上传文件", "See all": "查看全部", "See All": "查看全部",
     "Background Tasks": "后台任务", "Background tasks": "后台任务", "Background Task": "后台任务",
     "Terminals": "终端", "terminals": "终端", "Delete Terminal": "删除终端", "Split Terminal": "拆分终端",
@@ -71,25 +88,79 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Confirming this redo action will not make any code changes.": "确认此重做操作不会做出任何代码更改。",
     "Undo changes": "撤销更改", "Redo changes": "重做更改",
     "Record Audio": "录制音频", "Record Audio Ctrl+M": "录制音频 Ctrl+M",
+    "Stop Recording": "停止录音", "Quote": "引用",
+    "Stop Recording and Send": "停止录音并发送",
     "Send message": "发送消息", "Send message Enter": "发送消息 Enter",
+    "Send Message": "发送消息",
     "Getting started with a Project": "开始使用项目",
     "Now that you've created a project, configure your project's agent settings or start a conversation.": "现在您已经创建了一个项目，接下来请配置该项目的智能体设置，或者直接开始对话。",
     "Open Settings": "打开设置", "Start first conversation": "开始首次对话",
     "Main Agent": "主智能体", "Add Context": "添加上下文",
     "Loading Antigravity": "正在加载 Antigravity", "Loading": "正在加载",
     "+ New Conversation": "+ 新建对话", "New Conversation": "新建对话", "Conversation History": "历史对话", "Scheduled Tasks": "计划任务",
+    "New Conversation in Project": "在项目中新建对话",
     "Automations": "自动化", "Automation": "自动化",
+    "Create with Prompt": "通过提示词创建",
+    "No automations yet": "暂无自动化任务", "否 automations yet": "暂无自动化任务",
+    "Run a prompt on a schedule, like a morning summary of yesterday's changes. Runs show up here.": "按计划运行提示词，例如在早晨汇总前一天的更改。运行记录会显示在此处。",
+    "Run a prompt on a schedule, like a morning summary of yesterday's changes.": "按计划运行提示词，例如在早晨汇总前一天的更改。",
+    "Runs show up here.": "运行记录会显示在此处。",
     "Open File": "打开文件", "New Terminal": "新建终端", "just now": "刚刚", "Just now": "刚刚",
+    "Search for files in the project...": "搜索项目中的文件...",
+    "Search for files in the project…": "搜索项目中的文件…",
     "No conversations yet": "暂无对话", "Open IDE": "打开 IDE", "Window": "窗口",
     "Review": "审阅", "Email": "电子邮箱", "Upgrade": "升级", "Not in Project": "未分组项目",
     "Ask anything, @ to mention, / for actions": "输入任何问题，使用 @ 提及，使用 / 执行操作",
-    "Status": "状态", "Sort Conversations": "对话排序", "Worktree": "工作区树",
-    "New Project": "新建项目", "Quick Start": "快速开始",
-    "Good response": "好的回答", "Bad response": "差的回答",
+    "Status": "状态", "Sort Conversations": "对话排序", "Worktree": "工作树",
+    "Local Checkout": "本地工作", "New Worktree": "新建工作树",
+    "Worktrees are available for Git repositories": "Git 仓库可使用工作树功能",
+    "Select Environment": "选择环境", "Select Environment (Ctrl+.)": "选择环境 (Ctrl+.)",
+    "Select Project": "选择项目", "Search Conversations": "搜索对话",
+    "New Project": "新建项目", "New Remote Project": "新建远程项目", "Quick Start": "快速开始",
+    "Select a folder.": "选择文件夹。",
+    "Create a project whose conversations run remotely.": "创建一个项目，其对话将在远程运行。",
+    "Good response": "有效回复", "Bad response": "无效回复",
+    "Good Response": "有效回复", "Bad Response": "无效回复",
+
+    // Slash Command Descriptions (command identifiers stay unchanged)
+    "Ask a quick question without interrupting the main conversation.": "快速提问，不中断主对话。",
+    "Run until the specified goal is completely finished.": "持续执行，直到指定目标完全达成。",
+    "Compact the conversation now (summarize history to free up the context window).": "立即压缩对话（总结历史记录以释放上下文窗口空间）。",
+    "Run an instruction on a recurring schedule or as a one-time timer.": "按周期计划或一次性定时执行指令。",
+    "Invoke a browser agent for web tasks.": "调用浏览器智能体处理网页任务。",
+    "Plan carefully before executing a task.": "执行任务前仔细制定计划。",
+    "Interview me to align on a plan.": "向我提问，以便就计划达成一致。",
+    "Invoke a team of agents to autonomously tackle large projects.": "调用智能体团队，自主处理大型项目。",
+    "Reflect on recent successes or corrections to capture reusable skills or rules.": "回顾近期的成功经验或纠正意见，提炼可复用的技能或规则。",
+    "Invoke the Boost multi-agent orchestrator for complex tasks.": "调用 Boost 多智能体编排器处理复杂任务。",
+
+    // Cloud Resources & Remote Projects
+    "Select Resource(s)": "选择资源", "Add Resource": "添加资源", "Upload Files": "上传文件",
+    "Uploaded files and connected resources are mounted in your cloud environment.": "上传的文件和已连接资源会挂载到您的云端环境中。",
+    "Files and resources in cloud workspaces": "云端工作区中的文件和资源",
+    "Here's how uploaded files, attachments, and connected resources work in your cloud environment": "以下说明上传的文件、附件和已连接资源在云端环境中的使用方式。",
+    "Stored and mounted in your cloud environment": "在云端环境中存储并挂载",
+    "Uploaded project files and in-chat attachments are stored on Google servers and mounted into your cloud sandbox so your agent can read and work with them.": "上传的项目文件和对话中的附件会存储在 Google 服务器上，并挂载到您的云端沙盒中，供智能体读取和处理。",
+    "Connected Google Drive and GitHub resources": "已连接的 Google 云端硬盘和 GitHub 资源",
+    "Files, folders, and repositories you connect are accessible to your agent in this project, including during background or scheduled runs.": "智能体可以访问您为此项目连接的文件、文件夹和仓库，包括在后台运行或按计划运行时。",
+    "Manage and delete your data anytime": "随时管理和删除您的数据",
+    "Remove individual uploaded files or connected resources in Project Settings, or delete a project or conversation to remove its stored files.": "在项目设置中移除单个上传文件或已连接资源，或通过删除项目或对话来移除其存储的文件。",
+    "Got it": "知道了", "Recent": "最近使用",
+    "Search Remote...": "搜索远程资源...", "Search Remote…": "搜索远程资源…",
+    "GitHub Repositories": "GitHub 仓库",
+    "Loading Repositories...": "正在加载仓库...", "Loading Repositories…": "正在加载仓库…",
+    "Avoid uploading highly sensitive data and verify actions taken by your agent.": "避免上传高度敏感的数据，并核实智能体执行的操作。",
+    "Make sure you have the necessary rights to any content or files that you upload, including content of minors.": "确保您对上传的任何内容或文件（包括涉及未成年人的内容）拥有必要权利。",
+    "Don't generate content that infringes on others' rights, including content that deceives, harasses, or harms.": "请勿生成侵犯他人权利的内容，包括具有欺骗、骚扰或伤害性质的内容。",
+    "When using Antigravity, you must comply with Google's Prohibited Use Policy.": "使用 Antigravity 时，您必须遵守 Google 的《禁止使用政策》。",
+    "Your use is subject to the Google Antigravity Terms of Service and Google Privacy Policy.": "您的使用行为受《Google Antigravity 服务条款》和《Google 隐私权政策》约束。",
+    "necessary rights": "必要权利", "Prohibited Use Policy": "禁止使用政策",
+    "Google Antigravity Terms of Service": "Google Antigravity 服务条款", "Google Privacy Policy": "Google 隐私权政策",
 
     // General Settings Page
     "General": "常规", "Appearance": "外观", "Theme": "主题", "Light": "浅色", "Dark": "深色",
     "Language": "语言", "Version": "版本", "Check for Updates": "检查更新", "About": "关于",
+    "No updates available": "暂无可用更新",
     "Advanced": "高级", "API Key": "API 密钥", "Account": "账号", "Profile": "个人资料",
     "Logout": "退出登录", "Sign Out": "退出登录", "Feedback": "反馈", "Privacy": "隐私",
     "Terms": "条款", "Auto-start": "开机自启", "Launch on startup": "开机时启动",
@@ -98,6 +169,7 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Update": "更新", "Updates": "更新", "Check for update": "检查更新",
     "Models": "模型", "Customizations": "自定义", "Browser": "浏览器", "App": "应用", "Application": "应用", "Applications": "应用",
     "Projects": "项目", "Conversations": "对话", "Provide Feedback": "提供反馈",
+    "Give Feedback": "提供反馈",
     "Manage your plan, credentials, and general preferences.": "管理您的套餐、凭据和常规偏好设置。",
     "Enable Telemetry": "启用遥测",
     "When toggled on, Antigravity collects usage data to help Google enhance performance and features.": "开启后，Antigravity 将收集使用数据，以帮助 Google 提升性能和功能。",
@@ -105,13 +177,34 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Receive product updates, tips, and promotions from Google Antigravity via email.": "通过电子邮件接收来自 Google Antigravity 的产品更新、提示和促销信息。",
     "Your Plan: Google AI Pro": "当前计划：Google AI Pro", "Your Plan:": "当前计划：",
     "You can upgrade to a Google AI Ultra plan to receive higher rate limits.": "您可以升级至 Google AI Ultra 套餐以获得更高的使用限额。",
-    "By using this app, you agree to its ": "使用本应用即表示您同意其 ",
+    "By using this app, you agree to its": "使用本应用即表示您同意其",
+    "By using this app, you agree to its Terms of Service": "使用本应用即表示您同意其服务条款",
+    "By using this app, you agree to its 服务条款": "使用本应用即表示您同意其服务条款",
     "Terms of Service": "服务条款",
+    "Remote Agents Data": "远程智能体数据",
+    "Delete All Remote Agents Data": "删除所有远程智能体数据", "Delete All Data": "删除所有数据",
+    "Permanently delete your remote conversations, projects, scheduled tasks, connected plugins and settings. Data in the desktop app and your Google account are not affected.": "永久删除您的远程对话、项目、计划任务、已连接的插件和设置。桌面应用及 Google 账号中的数据不受影响。",
+    "永久删除your remote conversations, projects, scheduled tasks, connected plugins and settings. Data in the desktop app and your Google account are not affected.": "永久删除您的远程对话、项目、计划任务、已连接的插件和设置。桌面应用及 Google 账号中的数据不受影响。",
+    "Permanently delete your remote conversations, projects, scheduled tasks, connected plugins and settings.": "永久删除您的远程对话、项目、计划任务、已连接的插件和设置。",
+    "永久删除your remote conversations, projects, scheduled tasks, connected plugins and settings.": "永久删除您的远程对话、项目、计划任务、已连接的插件和设置。",
+    "Data in the desktop app and your Google account are not affected.": "桌面应用及 Google 账号中的数据不受影响。",
     "Configure agent execution, queued message delivery, and permissions.": "配置智能体执行、排队消息发送以及权限。",
+    "Permissions": "权限",
+    "Configure what the agent can do in local and remote conversations.": "配置智能体在本地和远程对话中可以执行的操作。",
+    "This Computer": "本机", "Remote": "远程",
+    "Controls permissions for remote conversations.": "控制远程对话的权限。",
+    "Auto (Preview)": "自动（预览）", "Turbo": "极速模式",
+    "Every command requires approval.": "每条命令都需要批准。",
+    "Ask before sensitive operations.": "在执行敏感操作前询问。",
+    "Automatically decide if commands run.": "自动决定是否执行命令。",
+    "Run all commands without restrictions.": "不受限制地执行所有命令。",
     "Execution": "执行", "Agent Settings": "智能体设置", "Agent Behavior": "智能体行为",
     "File Permissions": "文件权限", "Network Permissions": "网络权限",
     "Queued Messages": "排队消息", "Configure when follow-up messages are sent.": "配置发送后续消息的时机。",
     "Queue": "排队", "Send Immediately": "立即发送", "Keyboard shortcuts": "键盘快捷键",
+    "Queue until after the current run.": "加入队列，待当前运行结束后发送。",
+    "Queue until after the current turn.": "加入队列，待当前轮次结束后发送。",
+    "Interrupt the agent and send immediately.": "中断智能体并立即发送。",
     "Security Preset": "安全预设", 
     "Choose a predefined security preset for the agent. This controls terminal auto-execution policy, and file access policy.": "为智能体选择一个预定义的安全预设。这将控制终端自动执行策略和文件访问策略。",
     "Controls the actions the agent can take.": "控制智能体可以执行的操作。",
@@ -169,6 +262,7 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Search Engine": "搜索引擎", "Web Search": "网络搜索", "Enable Web Access": "启用网络访问",
     "Startup": "启动", "Launch at login": "登录时自动启动", "Hardware Acceleration": "硬件加速",
     "Current Version": "当前版本", "Up to date": "已是最新版本", "Downloading": "下载中...",
+    "Downloading Update": "正在下载更新", "Restart to Update": "重启以应用更新",
     "Restart to update": "重启以更新", "Danger Zone": "危险区域", "Clear History": "清除历史记录",
     "Delete All": "全部删除", "Reset to Default": "恢复默认设置", "Restore Defaults": "恢复默认设置", "Reset to default": "恢复默认", "Restore defaults": "恢复默认设置",
     "Keybindings": "快捷键绑定", "Command": "命令", "Shortcut": "快捷键", "Action": "操作",
@@ -201,18 +295,42 @@ DOM_TRANSLATOR_INJECTION = r"""
 
     // Models & Usage Tab
     "Models & Usage": "模型与用量", "Manage your model quota and credits.": "管理您的模型配额和积分额度。",
+    "Model Quota": "模型配额",
+    "Within each group, models share a weekly limit and a 5-hour limit. Quota is consumed proportionally to the cost of the tokens. Thus, limits will last longer with shorter tasks or using more cost-effective models. The 5-hour limit smooths out aggregate demand to fairly distribute global capacity across all users, while your weekly limit is tied directly to your individual tier.": "同一组内的模型共享每周限额和 5 小时限额。配额按 Token 成本比例消耗。因此，较短的任务或性价比更高的模型能让配额使用得更久。5 小时限额用于平滑总体需求，在所有用户之间公平分配全球服务容量；每周限额则直接取决于您的套餐档位。",
+    "Within each group, models share a weekly limit and a 5-hour limit.": "同一组内的模型共享每周限额和 5 小时限额。",
+    "Quota is consumed proportionally to the cost of the tokens.": "配额按 Token 成本比例消耗。",
+    "Thus, limits will last longer with shorter tasks or using more cost-effective models.": "因此，较短的任务或性价比更高的模型能让配额使用得更久。",
+    "The 5-hour limit smooths out aggregate demand to fairly distribute global capacity across all users, while your weekly limit is tied directly to your individual tier.": "5 小时限额用于平滑总体需求，在所有用户之间公平分配全球服务容量；每周限额则直接取决于您的套餐档位。",
+    "For paid Pro plans, Argon quota is separate. Higher Argon quota (included as part of the larger Gemini quota bucket) is available on Ultra plans.": "付费 Pro 套餐的 Argon 配额单独计算。Ultra 套餐可获得更高的 Argon 配额，该配额包含在更大的 Gemini 配额池中。",
+    "For paid Pro plans, Argon quota is separate.": "付费 Pro 套餐的 Argon 配额单独计算。",
+    "Higher Argon quota (included as part of the larger Gemini quota bucket) is available on Ultra plans.": "Ultra 套餐可获得更高的 Argon 配额，该配额包含在更大的 Gemini 配额池中。",
+    "Models within this group:": "本组包含的模型：", "Models within this group": "本组包含的模型",
     "Plan": "订阅计划", "Model Credits": "模型积分", "Enable AI Credit Overages": "启用 AI 积分超额使用",
     "When toggled on, Antigravity will use your AI credits to fulfill model requests once you're out of model quota. Antigravity will always use your model quota first before using AI credits.": "启用后，当您的模型配额用尽时，Antigravity 将使用您的 AI 积分来完成模型请求。Antigravity 将始终优先使用模型配额。",
     "See Activity": "查看活动", "Get More AI Credits": "获取更多 AI 积分",
     "Available AI Credits:": "可用 AI 积分：",
     "Gemini Models": "Gemini 模型", "Claude and GPT models": "Claude 和 GPT 模型",
+    "Usage": "用量", "Weekly limit": "每周限额", "5h limit": "5 小时限额",
+    "Gemini 4 Argon Weekly Limit": "Gemini 4 Argon 每周限额",
     "Limited time": "限时", "Low": "低", "High": "高", "View Usage": "查看用量",
     "Notice": "提示", "notice": "提示", "Leaving Soon": "即将下线", "Leaving soon": "即将下线",
+    "GPT-OSS will be removed from Antigravity on November 18, 2026.": "GPT-OSS 将于 2026 年 11 月 18 日从 Antigravity 中移除。",
     "Start using Gemini 3.8 Flash, our best Flash model.": "开始使用 Gemini 3.8 Flash，我们最强大的 Flash 模型。",
     "Sonnet 5.5 is now available on paid Pro and Ultra plans. Third-party model access will no longer be available on your current plan starting on November 2, 2026.": "Sonnet 5.5 现已在付费的 Pro 和 Ultra 方案中提供。从 2026 年 11 月 2 日起，您当前的方案将不再支持访问第三方模型。",
 
     // Customizations & Plugins
+    "Connectors": "连接器", "Browse Connectors": "浏览连接器", "Manage": "管理",
+    "No connectors available in this project": "此项目中暂无可用连接器",
     "Configure default behaviors, skills, and MCP servers.": "配置默认行为、技能和 MCP 服务器。",
+    "Manage project folders and settings.": "管理项目文件夹和设置。",
+    "Add Folder": "添加文件夹", "Delete Project": "删除项目",
+    // React may render the project name, count, and description as separate text nodes.
+    "Permanently delete": "永久删除",
+    "active conversation": "个进行中的对话", "active conversations": "个进行中的对话",
+    "active conversation.": "个进行中的对话。", "active conversations.": "个进行中的对话。",
+    "archived conversation": "个已归档对话", "archived conversations": "个已归档对话",
+    "archived conversation.": "个已归档对话。", "archived conversations.": "个已归档对话。",
+    "active conversation and": "个进行中的对话和", "active conversations and": "个进行中的对话和",
     "Learn more.": "了解更多。", "Learn more": "了解更多",
     "Token Usage": "Token 使用量",
     "The breakdown below shows token usage from customizations like rules, skills, and MCP. If a budget is exceeded, large rules are demoted to path pointers and large customizations are excluded automatically.": "下方的明细展示了来自规则、技能和 MCP 等自定义项的 Token 使用情况。如果超出预算，大型规则将降级为路径指针，大型自定义项将被自动排除。",
@@ -235,6 +353,18 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Google Workspace": "Google Workspace",
     "Build with Google": "使用 Google 构建",
     "Marketplace": "插件市场",
+    "No plugins match your search.": "未找到匹配的插件。",
+    "Featured": "精选", "Details": "详情",
+    "Design, Creative & Media": "设计、创意与媒体",
+    "Design, creative, and media tools.": "设计、创意和媒体工具。",
+    "Productivity & Project Management": "效率与项目管理",
+    "Plan work, track issues, sign documents, and manage your notes and files.": "规划工作、跟踪问题、签署文档，并管理笔记和文件。",
+    "Cloud Hosting & Deployment": "云托管与部署",
+    "Deploy and host your apps, sites, and their backends.": "部署和托管应用、网站及其后端。",
+    "APIs, services, and tools to build, test, secure, and run your apps.": "用于构建、测试、运行应用并保障其安全的 API、服务和工具。",
+    "Business": "商务",
+    "Payments, CRM, accounting, data, identity, customer support, marketing, and workflow automation.": "支付、客户关系管理（CRM）、会计、数据、身份管理、客户支持、营销和工作流自动化。",
+    "More Plugins": "更多插件", "Explore other marketplace customizations": "探索插件市场中的其他自定义项",
     "Installed": "已安装",
     "Find skills, agents, and more in the Marketplace.": "在插件市场中发现技能、智能体及更多内容。",
     "Browse the Marketplace": "浏览插件市场",
@@ -268,14 +398,37 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Reliable automation, in-depth debugging, and performance analysis in Chrome using Chrome DevTools and Puppeteer": "使用 Chrome DevTools 和 Puppeteer 在 Chrome 中实现可靠的自动化、深度调试和性能分析",
     "Google Kubernetes Engine (Remote)": "Google Kubernetes Engine (远程)",
 
+    // Command Palette & Conversation Filters
+    "Search for commands...": "搜索命令...", "Search for commands…": "搜索命令…",
+    "Collapse All Folders": "折叠全部文件夹", "Expand All Folders": "展开全部文件夹",
+    "Open Keyboard Shortcuts": "打开键盘快捷键设置", "Download Diagnostics": "下载诊断信息",
+    "Toggle Between Light/Dark Themes": "切换浅色／深色主题",
+    "Close Tab": "关闭标签页",
+    "Split Conversation Horizontally": "水平拆分对话", "Split Conversation Vertically": "垂直拆分对话",
+    "Open Command Palette": "打开命令面板", "Open Project Picker": "打开项目选择器",
+    "Toggle Project Selector": "切换项目选择器", "Toggle Environment Selector": "切换环境选择器",
+    "New Terminal Tab": "新建终端标签页", "Outside of Project": "项目外",
+    "Search for conversations...": "搜索对话...", "Search for conversations…": "搜索对话…",
+    "Only Unread": "仅显示未读对话", "Only Archived": "仅显示已归档对话",
+    "Only Automations": "仅显示自动化对话",
+
     // Shortcuts Panel
     "Configure keyboard shortcuts.": "配置键盘快捷键。",
+    "Edit Shortcut": "编辑快捷键",
+    "Search shortcuts...": "搜索快捷键...", "Search shortcuts…": "搜索快捷键…",
     "Keyboard shortcuts for quick navigation and control.": "用于快速导航和控制的键盘快捷键。",
     "RECOMMENDED": "推荐", "NAVIGATION": "导航", "Recommended": "推荐", "Navigation": "导航",
     "Open Conversation Picker": "打开对话选择器", "Open File Search": "打开文件搜索",
+    "Go Back": "后退", "Go Forward": "前进",
+    "New Tab": "新建标签页", "Reopen Closed Tab": "重新打开已关闭的标签页",
     "Focus Input": "聚焦输入框", "File Picker": "文件选择器",
     "Select Previous Conversation": "选择上一个对话", "Select Next Conversation": "选择下一个对话",
+    "Move Conversation Up": "上移对话", "Move Conversation Down": "下移对话",
     "Previous Pane Tab": "上一个面板标签", "Next Pane Tab": "下一个面板标签",
+    "Previous Side Panel Tab": "上一个侧边面板标签页", "Next Side Panel Tab": "下一个侧边面板标签页",
+    "Toggle Side Panel": "切换侧边面板", "Toggle Maximize Side Panel": "切换侧边面板最大化状态",
+    "Toggle Overview Panel": "切换概览面板", "Toggle Terminal": "切换终端",
+    "Archive This Conversation": "归档当前对话",
     "Toggle Model Selector": "切换模型选择器", "Toggle Voice Recording": "切换语音录制",
     "Find in Pane": "在面板中查找", "Add to Chat/Quote": "添加到对话/引用",
     "LAYOUT CONTROLS": "布局控制", "Layout Controls": "布局控制", "Layout controls": "布局控制",
@@ -308,6 +461,17 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Include app logs": "包含应用日志", "Send Feedback": "发送反馈",
 
     // Browser Tab
+    "Extensions": "插件", "No extensions available": "暂无可用插件",
+    "Search or enter a URL": "搜索或输入网址",
+    "Built-in Browser": "内置浏览器",
+    "Configure link opening and built-in browser preferences.": "配置链接打开方式和内置浏览器偏好设置。",
+    "Open Links In": "链接打开方式",
+    "Choose where links open by default when clicked.": "选择点击链接时默认使用的浏览器。",
+    "External Browser": "外部浏览器", "Download Location": "下载位置",
+    "Folder where files downloaded in the built-in browser are saved.": "内置浏览器下载文件的保存文件夹。",
+    "Change...": "更改...", "Change…": "更改…", "Browsing History": "浏览历史记录",
+    "Clear visited URLs and autocomplete suggestions from the built-in browser.": "清除内置浏览器中访问过的网址和自动补全建议。",
+    "Browser Subagent": "浏览器子智能体",
     "Browser Settings": "浏览器设置", "Configure the browser subagent. It requires": "配置浏览器子智能体。需要安装",
     "to be installed. The browser subagent can be invoked by typing /browser in the conversation input box.": "。您可以在对话输入框中输入 /browser 来调用浏览器子智能体。",
     "Browser Javascript Execution Policy": "浏览器 JavaScript 执行策略",
@@ -317,6 +481,36 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Allow full browser script execution without prompting.": "允许执行完整的浏览器脚本而不提示。",
     "Actuation Permissions": "操作权限", "Browser Actuation Rules": "浏览器操作规则",
     "Configure allowed and denied URLs for browser actuation.": "配置允许和拒绝进行浏览器操作的 URL。",
+
+    // Voice Mode
+    "Voice mode": "语音模式", "Microphone": "麦克风",
+    "Start Voice mode": "开启语音模式",
+    "Voice chat": "语音对话", "Connecting...": "正在连接...", "Connecting…": "正在连接…",
+    "End": "结束", "Listening. Ask anything.": "正在聆听，请尽管提问。",
+    "Listening.": "正在聆听，", "Ask anything.": "请尽管提问。",
+    "Mute mic": "将麦克风静音", "Mute Antigravity": "将 Antigravity 静音",
+    "Voice speed": "语速", "Voice speed,": "语速，",
+    "Mute Voice Mic": "将语音模式麦克风静音", "Mute Voice Speaker": "将语音模式扬声器静音",
+    "Voice": "音色", "Not set": "未设置", "Change": "更改",
+    "The voice used in Voice mode. Powered by Gemini Live.": "语音模式使用的音色。由 Gemini Live 提供支持。",
+    "The voice used in Voice mode.": "语音模式使用的音色。", "Powered by Gemini Live.": "由 Gemini Live 提供支持。",
+    "Powered by Gemini Live · You can change this in Settings later.": "由 Gemini Live 提供支持 · 您可以稍后在设置中更改。",
+    "Powered by Gemini Live · You can change this in 设置 later.": "由 Gemini Live 提供支持 · 您可以稍后在设置中更改。",
+    "How loud Antigravity's voice is.": "设置 Antigravity 的语音音量。",
+    "Choose Antigravity's Voice": "选择 Antigravity 的音色", "Choose Antigravity’s Voice": "选择 Antigravity 的音色",
+    "Clear and friendly": "清晰亲切", "Confident and clear": "自信清晰",
+    "Warm and engaging": "温暖且富有感染力", "Warm and approachable": "温暖亲和",
+    "Deep and velvety": "低沉柔滑", "Light and precise": "轻柔精准",
+    "Input device for voice mode and dictation.": "用于语音模式和听写的输入设备。",
+    "System default": "跟随系统",
+
+    // Notifications
+    "Manage your notification preferences.": "管理通知偏好设置。",
+    "Enable Notifications for Agent": "启用智能体通知",
+    "Show system notifications when your action is needed or the agent finishes.": "在需要您操作或智能体完成任务时显示系统通知。",
+    "Sound": "声音", "Enable Sounds for Agent": "启用智能体提示音",
+    "Play a sound when your action is needed or the agent finishes.": "在需要您操作或智能体完成任务时播放提示音。",
+    "Volume": "音量", "Set the volume of agent sounds.": "设置智能体提示音的音量。",
 
     // App Tab
     "App Settings": "应用设置", "Manage application settings.": "管理应用设置。",
@@ -329,20 +523,27 @@ DOM_TRANSLATOR_INJECTION = r"""
 
     // Conversations Tab & Permissions
     "Agent settings and permissions for conversations outside of projects.": "针对项目外对话的智能体设置和权限。",
+    "Settings for conversations outside of projects.": "项目外对话的设置。",
     "Inherit General": "继承全局设置", "Local Permissions": "本地权限",
     "Also includes": "还包括", "global settings": "全局设置",
     "when working in this project.": "（当在此项目中工作时）。",
     "Toggle Sidebar": "切换侧边栏", "View Split Diff": "分屏查看差异", "Collapse All": "全部折叠",
+    "Toggle sidebar": "切换侧边栏",
     "Learn more about": "了解更多关于",
     "Configure the agent's visual theme and display preferences.": "配置智能体的视觉主题和显示偏好。",
     "Chat Settings": "聊天设置", "Verbose Agent Chat": "详细的智能体对话",
+    "Conversation Steps": "对话步骤", "Verbose": "详细",
+    "Choose how much detail is shown during a conversation.": "选择对话过程中显示的详细程度。",
     "Display and preserve intermediate thinking steps.": "显示并保留中间思考过程。",
     "Conversation Width": "对话宽度", "Configure the maximum width of the conversation panel.": "配置对话面板的最大宽度。",
-    "Narrow": "较窄", "Wide": "较宽",
+    "Chat Width": "对话宽度", "Narrow": "较窄", "Wide": "较宽", "Fill": "铺满",
+    "Accessibility": "辅助功能", "Screen Reader Mode": "屏幕阅读器模式",
+    "Optimize the interface and terminal output for screen readers.": "针对屏幕阅读器优化界面和终端输出。",
     "Select light, dark, or inherit system settings.": "选择浅色、深色，或跟随系统设置。",
     "Light Theme": "浅色主题", "Preset": "预设", "Default Light": "默认浅色",
     "Background": "背景颜色", "Foreground": "前景颜色", "Accent": "强调色",
     "Dark Theme": "深色主题", "Default Dark": "默认深色",
+    "Legacy Dark": "旧版深色",
     "Allow write access to this path?": "允许写入此路径吗？",
     "Allow read access to this path?": "允许读取此路径吗？",
     "Allow execution of this command?": "允许执行此命令吗？",
@@ -384,6 +585,49 @@ DOM_TRANSLATOR_INJECTION = r"""
     "Turn on Remote Control in app settings": "请在应用设置中开启“远程控制”"
   };
 
+  const voicePresetNames = new Set(['Fola', 'Arlo', 'Cleo', 'Finn', 'Gero', 'Lora', 'Neno', 'Olin', 'Tari']);
+
+  const inlineNoticeRules = [
+    {
+      source: ['Powered by Gemini Live · You can change this in', 'Settings', 'later.'],
+      target: ['由 Gemini Live 提供支持 · 您可以稍后在', '设置', '中更改。']
+    },
+    {
+      source: ['By using this app, you agree to its', 'Terms of Service', ''],
+      target: ['使用本应用即表示您同意其', '服务条款', '']
+    }
+  ];
+
+  const cloudResourceNoticeSentences = [
+    "Avoid uploading highly sensitive data and verify actions taken by your agent.",
+    "Make sure you have the necessary rights to any content or files that you upload, including content of minors.",
+    "Don't generate content that infringes on others' rights, including content that deceives, harasses, or harms.",
+    "When using Antigravity, you must comply with Google's Prohibited Use Policy.",
+    "Your use is subject to the Google Antigravity Terms of Service and Google Privacy Policy."
+  ];
+  const cloudResourceNoticeLinks = [
+    'necessary rights', 'Prohibited Use Policy',
+    'Google Antigravity Terms of Service', 'Google Privacy Policy'
+  ];
+
+  function splitLinkedNotice(text, labels) {
+    const parts = [];
+    let offset = 0;
+    for (const label of labels) {
+      const index = text.indexOf(label, offset);
+      if (index === -1) return null;
+      parts.push(text.slice(offset, index), label);
+      offset = index + label.length;
+    }
+    parts.push(text.slice(offset));
+    return parts;
+  }
+  const cloudResourceNoticeSources = splitLinkedNotice(
+    cloudResourceNoticeSentences.join(' '), cloudResourceNoticeLinks);
+  const cloudResourceNoticeTargets = splitLinkedNotice(
+    cloudResourceNoticeSentences.map(sentence => dictionary[sentence]).join(''),
+    cloudResourceNoticeLinks.map(label => dictionary[label]));
+
   const coreWords = {
     "create": "创建", "delete": "删除", "new": "新建", "edit": "编辑", "save": "保存", "cancel": "取消", "confirm": "确认",
     "close": "关闭", "open": "打开", "stop": "停止", "start": "启动", "run": "运行", "add": "添加", "remove": "移除", "download": "下载",
@@ -398,6 +642,121 @@ DOM_TRANSLATOR_INJECTION = r"""
     "allow": "允许", "ask": "询问", "deny": "拒绝", "split": "分屏", "notice": "提示"
   };
 
+  // Verified marketplace descriptions; match the full text or an unambiguous truncated prefix.
+  const marketplaceDescriptionRules = [
+    // Canva
+    ["Create, edit, review, resize, and brand-check Canva designs with the Canva MCP server.","通过 Canva MCP 服务器创建、编辑、审阅 Canva 设计，调整尺寸并检查品牌规范。"],
+    // Figma
+    ["Turn Figma designs into production code, map components with Code Connect, and create or edit Figma files in Antigravity.","将 Figma 设计转化为生产代码，通过 Code Connect 映射组件，并在 Antigravity 中创建或编辑 Figma 文件。"],
+    // Mobbin
+    ["Give your AI agent 600,000+ real app screens, and the skills to use them. Includes the Mobbin MCP and a skill that redesigns your screen from patterns real apps ship, in your own design system, with the references behind every change.","为您的 AI 智能体提供超过 60 万个真实应用界面及相关使用技能。包含 Mobbin MCP 和界面重设计技能，可参考真实应用的设计模式，在您自己的设计系统中重新设计界面，并为每项更改提供参考依据。"],
+    // Atlassian Teamwork Graph CLI
+    ["Teamwork Graph CLI is Atlassian's agent-first interface to your entire work context: Jira issues, Confluence pages, Bitbucket PRs, along with your connected third-party data sources. Purpose-built for coding agents like Antigravity (terminal or desktop), and powered by Atlassian's context graph. Try: \"draft a Jira issue from this PR and link it to the epic.\" Run /twg-setup after install to connect Atlassian Teamwork Graph CLI to Antigravity.","Teamwork Graph CLI 是 Atlassian 面向智能体的工作上下文接口，涵盖 Jira 问题、Confluence 页面、Bitbucket 拉取请求及已连接的第三方数据源。专为 Antigravity 等编程智能体设计，支持终端和桌面端，并由 Atlassian 上下文图谱提供支持。例如：“根据此拉取请求起草 Jira 问题，并关联到对应的 Epic。”安装后运行 `/twg-setup`，将其连接到 Antigravity。"],
+    // Dropbox
+    ["Connect Antigravity to Dropbox to search, inspect, summarize, share, collect uploads, organize folders, and clean up files with confirmation for write actions.","将 Antigravity 连接到 Dropbox，搜索、查看、总结和共享文件，收集上传内容、整理文件夹并清理文件；写入操作需要确认。"],
+    // Linear
+    ["The product development system for teams and agents. Manage issues, projects, and documents across your Linear workspace from Antigravity.","面向团队和智能体的产品开发系统。在 Antigravity 中管理 Linear 工作区内的问题、项目和文档。"],
+    // monday.com
+    ["Plan and track work in monday.com from Antigravity: create, update and assign items, write docs, and build forms that turn requests into items.","在 Antigravity 中规划和跟踪 monday.com 工作：创建、更新和分配工作项，编写文档，以及创建可将请求转化为工作项的表单。"],
+    // Notion
+    ["Connect Antigravity to your Notion workspace with the Notion MCP server, plus skills for research, documentation, meeting prep, specs, trackers, and project updates.","通过 Notion MCP 服务器将 Antigravity 连接到您的 Notion 工作区，并提供研究、文档编写、会议准备、规格说明、跟踪记录和项目动态更新等技能。"],
+    // PandaDoc
+    ["Create and send proposals, quotes, and contracts for e-signature. Track signing progress and identify documents that need follow-up.","创建并发送方案、报价单和合同以进行电子签名，跟踪签署进度，并找出需要跟进的文档。"],
+    // Trello
+    ["Official Trello plugin with the Trello MCP server and a skill for boards, lists, cards, checklists, Inbox, and Planner.","Trello 官方插件，包含 Trello MCP 服务器，以及用于管理看板、列表、卡片、检查清单、收件箱和规划器的技能。"],
+    // Netlify
+    ["Build and deploy on Netlify: functions, edge functions, blobs, database, identity, forms, image CDN, caching, and AI Gateway, plus the Netlify MCP server.","在 Netlify 上构建和部署，支持函数、边缘函数、Blob 存储、数据库、身份认证、表单、图片 CDN、缓存和 AI 网关，并提供 Netlify MCP 服务器。"],
+    // Railway
+    ["Deploy, configure, monitor, and troubleshoot apps, databases, and infrastructure on Railway from Antigravity with Railway's agent skill and hosted MCP server.","通过 Railway 智能体技能和托管 MCP 服务器，在 Antigravity 中部署、配置、监控和排查 Railway 上的应用、数据库及基础设施。"],
+    // Vercel
+    ["Build and deploy web apps and AI agents on Vercel with skills for Next.js, AI SDK, and cloud services, plus the official Vercel MCP server.","在 Vercel 上构建和部署 Web 应用及 AI 智能体，提供 Next.js、AI SDK 和云服务相关技能，以及 Vercel 官方 MCP 服务器。"],
+    // Wix
+    ["Build Wix apps and headless sites, and manage Wix stores, bookings, CMS and more, with Wix CLI skills and the official Wix MCP server.","通过 Wix CLI 技能和官方 MCP 服务器，构建 Wix 应用及无头网站，并管理 Wix 商店、预约、内容管理系统等功能。"],
+    // WordPress
+    ["Build, publish, and manage WordPress.com and Jetpack-connected sites. Draft posts, edit blocks, check traffic stats, moderate comments, and manage plugins.","构建、发布和管理 WordPress.com 网站及已连接 Jetpack 的网站。起草文章、编辑区块、查看流量统计、审核评论并管理插件。"],
+    // Auth0
+    ["Add Auth0 authentication to any app: login, MFA, SSO, Organizations, RBAC, custom domains, and branding. Debug auth errors and migrate from other providers.","为应用集成 Auth0 身份认证，支持登录、多因素认证（MFA）、单点登录（SSO）、组织管理、基于角色的访问控制（RBAC）、自定义域名和品牌设置。排查认证错误，并从其他服务提供商迁移。"],
+    // Base44
+    ["Build and deploy Base44 full-stack apps: CLI project management, JavaScript/TypeScript SDK development, and production troubleshooting skills.","构建和部署 Base44 全栈应用，提供 CLI 项目管理、JavaScript／TypeScript SDK 开发和生产环境故障排查技能。"],
+    // Browserbase
+    ["Give your agent a real browser: navigate, click, type, screenshot, and extract data from any site, locally or on Browserbase cloud browsers.","为智能体提供真实浏览器，可在本地或 Browserbase 云浏览器中访问网站、点击、输入、截图并提取数据。"],
+    // CodeRabbit
+    ["AI-powered code review and review-comment autofix, powered by CodeRabbit.","由 CodeRabbit 提供支持的 AI 代码审查，以及针对审查意见的自动修复。"],
+    // Context7
+    ["Up-to-date documentation lookup. Pull version-specific documentation and code examples directly from source repositories into your LLM context.","查询最新文档，直接从源码仓库获取指定版本的文档和代码示例，并加入大语言模型的上下文。"],
+    // CrowdStrike Falcon
+    ["Use the official CrowdStrike-hosted MCP server to work across Falcon: detections, cases, threat intel, SIEM, hosts, vulnerabilities, cloud, and more.","通过 CrowdStrike 官方托管的 MCP 服务器使用 Falcon，处理检测结果、安全事件、威胁情报、SIEM、主机、漏洞和云环境等内容。"],
+    // Datadog
+    ["Use Datadog directly in Antigravity through a preconfigured Datadog MCP server. Query logs, metrics, traces, dashboards, and more through natural conversation. This plugin is in preview.","通过预配置的 Datadog MCP 服务器，直接在 Antigravity 中使用 Datadog。通过自然对话查询日志、指标、追踪记录、仪表板等内容。此插件目前处于预览阶段。"],
+    // Dynatrace
+    ["Investigate production issues with real Dynatrace data: problems and root causes, logs, metrics, traces, and vulnerabilities, via skills and the MCP server.","通过技能和 MCP 服务器，使用真实的 Dynatrace 数据调查生产环境问题，包括问题及根本原因、日志、指标、追踪记录和漏洞。"],
+    // Endor Labs Agent Kit
+    ["Packaged workflows for SCA remediation, AI SAST triage, CI/CD posture, malware response, findings review, Endor Labs setup, and more.","提供用于 SCA 问题修复、AI SAST 问题分诊、CI/CD 安全态势、恶意软件响应、发现项审查和 Endor Labs 配置等任务的工作流。"],
+    // Exabeam Agentic SOC
+    ["Triage Exabeam New-Scale alerts and cases end to end: gather the evidence, map MITRE, reach a verdict, and record it behind an approval step.","对 Exabeam New-Scale 警报和安全事件进行端到端分诊：收集证据、映射 MITRE、得出判定，并在审批后记录结果。"],
+    // Harness
+    ["Build and debug pipelines, manage deployments, investigate security findings, and operate Harness with connected tools and reusable workflow skills.","通过已连接的工具和可复用工作流技能，构建与调试流水线、管理部署、调查安全发现项并操作 Harness。"],
+    // Keenable
+    ["Search the web and read any page as clean markdown with Keenable, a search engine built for AI agents. Keyless: no signup or API key needed.","使用专为 AI 智能体构建的 Keenable 搜索引擎搜索网页，并以简洁的 Markdown 格式读取页面。无需注册或 API 密钥。"],
+    // Keenable SELECT
+    ["Ask a question of the live web and get a table back. Keenable SELECT runs many searches, reads the pages and extracts the fields you need in one call. Sign in with a Keenable account.","向实时互联网提问并获得表格结果。Keenable SELECT 可在一次调用中执行多次搜索、读取页面并提取所需字段。使用 Keenable 账户登录。"],
+    // Leapwork Play
+    ["Create, run and debug Leapwork Play tests and runlists, build agents, and hand work to Play's AI workflows, right from Antigravity.","直接在 Antigravity 中创建、运行和调试 Leapwork Play 测试及运行列表，构建智能体，并将工作交给 Play 的 AI 工作流处理。"],
+    // MongoDB Atlas (Managed MCP)
+    ["Official Antigravity plugin for MongoDB Atlas (hosted MCP Server + Skills). Connect to the MongoDB-hosted Atlas MCP server, explore data, manage collections, optimize queries, generate reliable code, implement best practices, develop advanced features, and more.","MongoDB Atlas 的 Antigravity 官方插件，包含托管 MCP 服务器和技能。连接 MongoDB 托管的 Atlas MCP 服务器，探索数据、管理集合、优化查询、生成可靠代码、落实最佳实践并开发高级功能。"],
+    // Parallel
+    ["Search the live web and fetch page content with Parallel's hosted MCP server. Free access with no Parallel account, API key, or Parallel CLI required.","通过 Parallel 托管的 MCP 服务器搜索实时网页并获取页面内容。可免费使用，无需 Parallel 账户、API 密钥或 Parallel CLI。"],
+    // PingOne
+    ["Agent plugin for PingOne multi-tenant. Includes skills and a remote MCP server that lets AI agents configure and monitor your PingOne environments.","面向 PingOne 多租户环境的智能体插件。包含技能和远程 MCP 服务器，使 AI 智能体能够配置和监控您的 PingOne 环境。"],
+    // Postman
+    ["Equip Antigravity with specialized Postman skills for the complete API lifecycle. Discover, design, test, document, mock, monitor, and improve APIs through agent-friendly, filesystem-first workflows.","为 Antigravity 提供覆盖 API 完整生命周期的专用 Postman 技能。通过便于智能体使用、优先基于文件系统的工作流，完成 API 发现、设计、测试、文档编写、模拟、监控和改进。"],
+    // Qodo
+    ["Set up Qodo, explore code and repository history, review local changes, and resolve pull-request findings directly from Antigravity.","直接在 Antigravity 中配置 Qodo、浏览代码及仓库历史、审阅本地更改，并解决拉取请求审查中发现的问题。"],
+    // SentinelOne Purple AI
+    ["Query your SentinelOne Singularity Console from Antigravity through a self-hosted, read-only Purple AI MCP server. Requires an active console deployment, your console URL, and an API token.","通过自行托管的只读 Purple AI MCP 服务器，在 Antigravity 中查询 SentinelOne Singularity 控制台。需要已部署且可用的控制台、控制台 URL 和 API 令牌。"],
+    // Sentry
+    ["Set up Sentry monitoring, investigate production errors, and configure alerts and releases with expert skills and live context from your Sentry projects.","利用专业技能和 Sentry 项目的实时上下文，配置 Sentry 监控、调查生产环境错误，以及设置警报和版本发布。"],
+    // Supabase
+    ["Official Supabase plugin for Antigravity with Supabase skills and MCP access for project management, database work, auth, storage, and Postgres best practices.","Supabase 的 Antigravity 官方插件，提供 Supabase 技能和 MCP 访问，支持项目管理、数据库操作、身份认证、存储及 Postgres 最佳实践。"],
+    // Superpowers
+    ["Make your coding agent a better engineer","让您的编程智能体成为更出色的工程师。"],
+    // Unity
+    ["Unity's official plugin for Antigravity, with curated skills for game development, monetization, and performance optimization.","Unity 的 Antigravity 官方插件，提供游戏开发、商业变现和性能优化相关的精选技能。"],
+    // VirusTotal
+    ["Investigate files, URLs, domains and IP addresses with VirusTotal threat intelligence, analysis and submission recovery.","借助 VirusTotal 的威胁情报、分析和提交记录恢复功能，调查文件、URL、域名及 IP 地址。"],
+    // Bigin
+    ["Manage your Bigin CRM from Antigravity: review pipelines, find contacts and deals, log calls, plan follow-ups, and email customers.","在 Antigravity 中管理 Bigin CRM：查看销售流程、查找联系人和交易、记录通话、规划跟进并向客户发送邮件。"],
+    // Databricks
+    ["Databricks skills for the CLI, Apps, Lakebase, Model Serving, Lakeflow Jobs, Spark Declarative Pipelines, Declarative Automation Bundles (DABs), and classic-to-serverless migration.","提供 Databricks CLI、Apps、Lakebase、模型服务、Lakeflow Jobs、Spark 声明式流水线、声明式自动化包（DAB）以及从传统模式迁移至无服务器模式的相关技能。"],
+    // Intercom
+    ["Search Intercom conversations, contacts, and companies, spot support trends, and install the Intercom Messenger with secure identity verification.","搜索 Intercom 对话、联系人和公司，发现客户支持趋势，并安装支持安全身份验证的 Intercom Messenger。"],
+    // Semrush
+    ["SEO workflows on live Semrush data: keyword research, site audits, backlinks, competitor, traffic and market analytics, PPC, and AI brand visibility.","基于实时 Semrush 数据的搜索引擎优化（SEO）工作流，涵盖关键词研究、网站审计、反向链接、竞争对手分析、流量与市场分析、按点击付费广告（PPC）和 AI 品牌可见度。"],
+    // Stripe
+    ["Accept payments and grow your business. Stripe's official MCP server enables AI agents to manage customers, products, prices, payment links, invoices, subscriptions, and refunds, as well as search Stripe documentation.","接受付款并拓展业务。Stripe 官方 MCP 服务器使 AI 智能体能够管理客户、产品、价格、支付链接、发票、订阅和退款，并搜索 Stripe 文档。"],
+    // Wispr Flow
+    ["Search and read your Wispr Flow meeting notes, transcripts, scratchpad notes, and calendar events. Read-only access to your own account.","搜索和读取您的 Wispr Flow 会议笔记、转录文本、草稿笔记和日历事件。仅提供对您本人账户的只读访问。"],
+    // Zapier
+    ["Connect 9,000+ apps to your AI workflow. Discover, enable, and execute Zapier actions and workflows directly from your client.","将超过 9,000 个应用连接到 AI 工作流，直接从客户端发现、启用和执行 Zapier 操作及工作流。"],
+    // Zoho Books
+    ["Run Zoho Books from Antigravity: invoicing, bills, banking, journals, projects, items, taxes, customization and automation.","在 Antigravity 中操作 Zoho Books，处理开票、账单、银行业务、日记账、项目、商品、税务、自定义设置和自动化。"],
+    // Zoho CRM
+    ["Build on Zoho CRM v8: REST API, Deluge functions, ClientScript, widgets, COQL and connections, with live CRM data through your Zoho MCP server.","基于 Zoho CRM v8 开发，支持 REST API、Deluge 函数、ClientScript、小部件、COQL 和连接，并通过 Zoho MCP 服务器使用实时 CRM 数据。"],
+    // Zoho Desk
+    ["Zoho Desk plugin for Antigravity. Review, prioritize, and update Zoho Desk tickets directly from Antigravity through Zoho Desk MCP and includes a Ticket Prioritization Agent for triage and priority updates.","Zoho Desk 的 Antigravity 插件。通过 Zoho Desk MCP 直接审阅工单、确定优先级并更新工单，另含用于工单分诊和优先级更新的智能体。"],
+    // Zoho Projects
+    ["Connect Zoho Projects to Antigravity to turn tasks and issues into working code. Access project context, investigate bugs, and update work items as you develop.","将 Zoho Projects 连接到 Antigravity，把任务和问题转化为可运行的代码。在开发过程中获取项目上下文、调查缺陷并更新工作项。"],
+    // Looker
+    ["Connect to your managed Looker MCP server to explore data, run saved Looks, build dashboards, and validate LookML.","连接到您托管的 Looker MCP 服务器，探索数据、运行已保存的 Looks、构建仪表板并验证 LookML。"],
+  ];
+
+  // Preserve links by translating the privacy notice one sentence at a time.
+  const marketplacePrivacyRules = [
+    ["Google does not control the availability or functionality of third party developer tools.","Google 不控制第三方开发者工具的可用性或功能。"],
+    ["Your data from third party developer tools connected to your Antigravity instance may be shared with Google.","您在与 Antigravity 实例连接的第三方开发者工具中的数据可能会与 Google 共享。"],
+    ["Google will protect any such data in accordance with the Google Privacy Policy, found here:","Google 将依据 Google 隐私权政策保护此类数据，详见："],
+  ];
+
   // Structured Prefix & Content Match Rules for Complex / Truncated Text
   const textPrefixRules = [
     // Plugins & Customizations
@@ -411,6 +770,7 @@ DOM_TRANSLATOR_INJECTION = r"""
     ["Comprehensive guide and reference for the Antigravity Customization System", "Antigravity 自定义系统的综合指南和参考。用于解释自定义项的工作原理、加载优先级、发现机制，并指导创建技能、规则、插件、钩子和 MCP 服务器。"],
     ["Skills providing tailored instructions for happy path", "提供 Dart 和 Flutter 开发主流程定制化指南的技能。"],
     ["Interactive guide to design and create a scheduled background automation", "设计和创建计划后台自动化的交互式指南。当用户想要创建自动化或周期性计划任务时（例如“总结我的邮件”），请使用此技能。"],
+    ["How to write and run a dynamic workflow script with the `run_workflow` tool:", "如何使用 `run_workflow` 工具编写和运行动态工作流脚本：通过 Python 脚本，使用 `agent`、`parallel`、`pipeline` 和 `phase` 编排多个智能体。适用于任务可拆分为多个独立或分阶段的智能体工作单元（按文件、模块、问题或审查角度分别处理，再汇总结果），或用户要求使用工作流的情况。单个委派任务应使用子智能体；旧版工作流文件请参阅 `migrate-workflows`。"],
     ["How to manage and create plugins", "如何管理和创建插件——作为单一单元安装、启用和禁用的命名空间技能、智能体、规则、MCP 服务器和钩子捆绑包。"],
     ["Build, package, run, and debug UI extensions for Antigravity", "为 Antigravity 构建、打包、运行和调试 UI 扩展：在侧边面板中渲染的交互式 Web 面板，由使用内置 Sidecar SDK 的 Node.js sidecar 提供服务。"],
     ["Discover UI plugin panels relevant to the current task", "发现与当前任务相关的 UI 插件面板，并在对话中显示一键式快捷胶囊以在侧边面板中打开（切换）它们。"],
@@ -521,9 +881,71 @@ DOM_TRANSLATOR_INJECTION = r"""
     if (dictionary[trimmed]) {
       return text.replace(trimmed, dictionary[trimmed]);
     }
+
+    let privacyText = text;
+    for (const [original, translated] of marketplacePrivacyRules) {
+      privacyText = privacyText.replace(original, () => translated);
+    }
+    if (privacyText !== text) return privacyText;
+
+    const normalized = trimmed.replace(/\s+/g, " ");
+    if (normalized !== trimmed && dictionary[normalized]) {
+      return text.replace(trimmed, () => dictionary[normalized]);
+    }
+    const ellipsis = normalized.match(/^(.*?)(?:\.{3}|…)$/);
+    const prefix = ellipsis ? ellipsis[1].trimEnd() : "";
+    const descriptions = marketplaceDescriptionRules.filter(([original]) =>
+      original === normalized || (prefix.length >= 24 && original.startsWith(prefix)));
+    if (descriptions.length === 1) {
+      return text.replace(trimmed, () => descriptions[0][1]);
+    }
     
     // Dynamic Regex Translations
     let m;
+    if ((m = trimmed.match(/^(?:Voice chat|语音对话)(\s*·\s*)((?:\d{1,2}:){1,2}\d{2})(\s*·\s*)(\d+(?:\.\d+)?)s$/))) {
+      return text.replace(trimmed, () => "语音对话" + m[1] + m[2] + m[3] + m[4] + " 秒");
+    }
+    if ((m = trimmed.match(/^Voice speed,\s*(\d+(?:\.\d+)?)x$/))) {
+      return text.replace(trimmed, () => "语速，" + m[1] + "x");
+    }
+    if ((m = trimmed.match(/^Use\s+(\S+)$/)) && voicePresetNames.has(m[1])) {
+      return text.replace(trimmed, () => "使用 " + m[1]);
+    }
+    if ((m = trimmed.match(/^Models within this group:\s*([\s\S]+)$/))) {
+      return text.replace(trimmed, () => "本组包含的模型：" + m[1]);
+    }
+    if ((m = trimmed.match(/^(\d+)\s+(?:on|开)\s+for this conversation$/))) {
+      return text.replace(trimmed, () => "本次对话已启用 " + m[1] + " 个");
+    }
+    // Tooltip labels may share a text node with a user-configurable shortcut.
+    if ((m = trimmed.match(/^(Select Project|Send [Mm]essage|Search Conversations|Quote|Stop Recording(?: and Send)?|Mute mic|Mute Antigravity)(\s+.+)$/))) {
+      const shortcut = m[2].trim().replace(/^\((.*)\)$/, "$1");
+      if (/^(?:(?:Ctrl|Cmd|Alt|Shift|Meta)\s*\+\s*)+\S+$/.test(shortcut) ||
+          /^[⌘⌃⌥⇧]+\S+$/.test(shortcut) || shortcut === "Enter") {
+        return text.replace(trimmed, () => dictionary[m[1]] + m[2]);
+      }
+    }
+    if ((m = trimmed.match(/^(\d+(?:\.\d+)?)%\s+left$/))) {
+      return text.replace(trimmed, () => "剩余 " + m[1] + "%");
+    }
+    if ((m = trimmed.match(/^(?:Permanently delete\s+|永久删除\s*)(.+?)(?:\s+including\s+|\s*包括\s*)(\d+)\s+active conversations?\s+and\s+(\d+)\s+archived conversations?\.?$/))) {
+      return text.replace(trimmed, () => "永久删除 " + m[1].trim() + "，包括 " + m[2] + " 个进行中的对话和 " + m[3] + " 个已归档对话。");
+    }
+    if ((m = trimmed.match(/^(\d+)\s+active conversations?\s+and\s+(\d+)\s+archived conversations?(\.)?$/))) {
+      return text.replace(trimmed, () => m[1] + " 个进行中的对话和 " + m[2] + " 个已归档对话" + (m[3] ? "。" : ""));
+    }
+    if ((m = trimmed.match(/^Permanently delete (.+?)\s+(?:including|包括)\s*(\d+)\s+active conversations?\.?$/))) {
+      return text.replace(trimmed, () => "永久删除" + m[1] + "，包括 " + m[2] + " 个进行中的对话。");
+    }
+    if ((m = trimmed.match(/^Permanently delete (.+)$/))) {
+      return text.replace(trimmed, () => "永久删除" + m[1]);
+    }
+    if ((m = trimmed.match(/^(\d+)\s+active conversations?(\.)?$/))) {
+      return text.replace(trimmed, () => m[1] + " 个进行中的对话" + (m[2] ? "。" : ""));
+    }
+    if ((m = trimmed.match(/^(\d+)\s+archived conversations?(\.)?$/))) {
+      return text.replace(trimmed, () => m[1] + " 个已归档对话" + (m[2] ? "。" : ""));
+    }
     if (text.indexOf("of the customization budget is available") !== -1) {
       text = text.replace(/(\d+(?:\.\d+)?)% of the customization budget is available\.?/g, "自定义项预算可用额度为 $1%。");
       text = text.replace(/%\s*of the customization budget is available\.?/g, "% 的自定义项预算可用额度。");
@@ -710,6 +1132,23 @@ DOM_TRANSLATOR_INJECTION = r"""
     if (el.querySelector && el.querySelector('svg, button, input')) return false;
     let t = el.textContent ? el.textContent.trim() : '';
     if (!t) return false;
+    if (/^(?:No|否)\s+automations\s+yet$/.test(t) &&
+        !(el.closest && el.closest('pre, code, .monaco-editor, script, style')) &&
+        !(el.querySelector && el.querySelector('pre, code, .monaco-editor, script, style'))) {
+      // Keep React's existing nodes when the empty label is split across text nodes or spans.
+      const textNodes = [];
+      const collectText = node => {
+        if (node.nodeType === Node.TEXT_NODE) textNodes.push(node);
+        else Array.from(node.childNodes || []).forEach(collectText);
+      };
+      collectText(el);
+      if (textNodes.length) {
+        textNodes.forEach((node, index) => {
+          node.textContent = index === 0 ? "暂无自动化任务" : "";
+        });
+        return true;
+      }
+    }
     let m = t.match(/^(?:No|否)\s*(.*?)\s*found\.?$/i) || t.match(/^(.*?)\s+found\.?$/i) || t === "暂无项目" || t === "暂无对话";
     if (el.__empty_handled) return false;
     if (m) {
@@ -748,13 +1187,295 @@ DOM_TRANSLATOR_INJECTION = r"""
     return false;
   }
 
+  function translateVoiceChatDuration(node) {
+    if (!/^(?:\d+(?:\.\d+)?)?s$/.test(node.textContent.trim())) return false;
+    let container = node.parentElement;
+    for (let depth = 0; container && depth < 4 && container.tagName !== 'BODY'; depth++, container = container.parentElement) {
+      const text = (container.textContent || '').trim();
+      if (/^(?:Voice chat|语音对话)\s*·\s*(?:\d{1,2}:){1,2}\d{2}\s*·\s*\d+(?:\.\d+)?s$/.test(text)) {
+        node.textContent = node.textContent.replace(/s(?=\s*$)/, ' 秒');
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function translateArchiveRestore(node) {
+    if (node.textContent.trim() !== 'Restore' || !node.parentElement || !node.parentElement.closest) return false;
+    const control = node.parentElement.closest('button, [role="button"], [role="menuitem"]');
+    if (!control) return false;
+    let archived = control.getAttribute('role') === 'menuitem';
+    let container = control.parentElement;
+    for (let depth = 0; !archived && container && depth < 3 && container.tagName !== 'BODY'; depth++, container = container.parentElement) {
+      archived = /^(?:This chat is archived\.|此对话已归档。)\s*Restore$/.test((container.textContent || '').trim());
+    }
+    if (!archived) return false;
+    node.textContent = node.textContent.replace('Restore', '取消归档');
+    if (control.title === 'Restore') control.title = '取消归档';
+    if (control.getAttribute('aria-label') === 'Restore') control.setAttribute('aria-label', '取消归档');
+    return true;
+  }
+
+  function translateArchiveToast(el) {
+    if (!el || !el.querySelectorAll || el.tagName === 'BODY' || el.tagName === 'HTML') return false;
+    const text = (el.textContent || '').trim();
+    if (!text.startsWith('View archived in the sidebar (') && !text.startsWith('在侧边栏的筛选')) return false;
+    const protectedContent = 'pre, code, .monaco-editor, textarea, input, script, style, [contenteditable="true"]';
+    if ((el.closest && el.closest(protectedContent)) || el.querySelector(protectedContent)) return false;
+    const icon = el.querySelector('svg');
+    if (!icon) return false;
+    const source = ['View archived in the sidebar (', 'menu).'];
+    const target = ['在侧边栏的筛选', '菜单中查看已归档对话。'];
+    const groups = [[], []];
+    let group = 0;
+    const collectText = node => {
+      if (node === icon) { group = 1; return; }
+      if (node.nodeType === Node.TEXT_NODE) { groups[group].push(node); return; }
+      Array.from(node.childNodes || []).forEach(collectText);
+    };
+    collectText(el);
+    if (groups.some((nodes, index) => {
+      const value = nodes.map(node => node.textContent).join('').replace(/\s+/g, ' ').trim();
+      return !nodes.length || (value !== source[index] && value !== target[index]);
+    })) return false;
+    groups.forEach((nodes, index) => nodes.forEach((node, textIndex) => {
+      const translated = textIndex === 0 ? target[index] : '';
+      if (node.textContent !== translated) node.textContent = translated;
+    }));
+    return true;
+  }
+
+  function translateVoicePresetPrefix(node) {
+    if (node.textContent.trim() !== 'Use' || !node.parentElement || !node.parentElement.closest) return false;
+    const button = node.parentElement.closest('button, [role="button"]');
+    const match = button && button.textContent.trim().match(/^Use\s+(\S+)$/);
+    if (!match || !voicePresetNames.has(match[1])) return false;
+    node.textContent = node.textContent.replace('Use', '使用');
+    return true;
+  }
+
+  const connectorCountStates = new WeakMap();
+  const connectorCountOwners = new WeakMap();
+
+  function forgetConnectorCount(el, state) {
+    state.nodes.forEach(node => {
+      if (connectorCountOwners.get(node) === el) connectorCountOwners.delete(node);
+    });
+    connectorCountStates.delete(el);
+  }
+
+  function translateConnectorCount(el) {
+    if (!el || !el.childNodes || el.tagName === 'BODY' || el.tagName === 'HTML') return false;
+    let state = connectorCountStates.get(el);
+    const match = (el.textContent || '').trim().match(/^(\d+)\s+(?:on|开)\s+for this conversation$/);
+    if (!state && !match) return false;
+    const protectedContent = 'pre, code, .monaco-editor, textarea, input, script, style, [contenteditable="true"]';
+    if ((el.closest && el.closest(protectedContent)) ||
+        (el.querySelector && el.querySelector(protectedContent))) return false;
+    const nodes = [];
+    const collectText = node => {
+      if (node.nodeType === Node.TEXT_NODE) nodes.push(node);
+      else Array.from(node.childNodes || []).forEach(collectText);
+    };
+    collectText(el);
+    if (state && (state.nodes.length !== nodes.length || state.nodes.some((node, index) => node !== nodes[index]))) {
+      forgetConnectorCount(el, state);
+      state = null;
+    }
+    if (!state) {
+      if (!match || !nodes.length) return false;
+      const originals = nodes.map(node => node.textContent);
+      const owner = originals.findIndex(text => text.trim());
+      const counter = owner === -1 ? null : originals[owner].match(/^(\s*)(\d+)([\s\S]*)$/);
+      if (!counter || counter[2] !== match[1]) return false;
+      state = {nodes, originals, outputs: originals.slice(), owner,
+        before: counter[1], after: counter[3], count: match[1]};
+      connectorCountStates.set(el, state);
+      nodes.forEach(node => connectorCountOwners.set(node, el));
+    }
+    const values = nodes.map(node => node.textContent);
+    const counter = values[state.owner].match(/^(\s*)(\d+)([\s\S]*)$/);
+    const updated = counter && counter[1] === state.before && counter[3] === state.after;
+    if (values.some((text, index) => !(index === state.owner && updated) &&
+        text !== state.originals[index] && text !== state.outputs[index])) {
+      forgetConnectorCount(el, state);
+      return false;
+    }
+    if (updated) state.count = counter[2];
+    // Keep the original counter node reference so subsequent React updates remain observable.
+    state.outputs = nodes.map((_, index) => index === 0 ? "本次对话已启用 " + state.count + " 个" : '');
+    let changed = false;
+    nodes.forEach((node, index) => {
+      if (node.textContent !== state.outputs[index]) {
+        node.textContent = state.outputs[index];
+        changed = true;
+      }
+    });
+    return changed;
+  }
+
+  function translateInlineNotice(el) {
+    if (!el || !el.querySelectorAll || el.tagName === 'BODY' || el.tagName === 'HTML') return false;
+    const normalize = text => text.replace(/\s+/g, ' ').trim();
+    const text = normalize(el.textContent || '');
+    const rule = inlineNoticeRules.find(({source, target}) =>
+      text.startsWith(source[0]) || text.startsWith(target[0]));
+    if (!rule) return false;
+    const protectedContent = 'pre, code, .monaco-editor, textarea, input, script, style, [contenteditable="true"]';
+    if ((el.closest && el.closest(protectedContent)) || el.querySelector(protectedContent)) return false;
+    const isLabel = node => {
+      const label = normalize(node.textContent || '');
+      return label === rule.source[1] || label === rule.target[1];
+    };
+    let links = Array.from(el.querySelectorAll('a, button, [role="link"], [role="button"]')).filter(isLabel);
+    if (!links.length) {
+      // Some settings entries use a clickable span without an ARIA role.
+      const labels = Array.from(el.querySelectorAll('*')).filter(isLabel);
+      links = labels.filter(label => !labels.some(other => other !== label && other.contains(label)));
+    }
+    if (links.length !== 1) return false;
+    const link = links[0];
+    const groups = [[], [], []];
+    let group = 0;
+    const collectText = node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        groups[group].push(node);
+        return;
+      }
+      if (node === link) group = 1;
+      Array.from(node.childNodes || []).forEach(collectText);
+      if (node === link) group = 2;
+    };
+    collectText(el);
+    const values = groups.map(nodes => nodes.map(node => node.textContent).join(''));
+    if (values.some((value, index) => {
+      const current = normalize(value);
+      return (current !== rule.source[index] && current !== rule.target[index]) ||
+        (!groups[index].length && rule.target[index]);
+    })) return false;
+    groups.forEach((nodes, index) => nodes.forEach((node, textIndex) => {
+      const translated = textIndex === 0 ? rule.target[index] : '';
+      if (node.textContent !== translated) node.textContent = translated;
+    }));
+    return true;
+  }
+
+  function translateCloudResourceNotice(el) {
+    if (!el || !el.querySelectorAll || el.tagName === 'BODY' || el.tagName === 'HTML' ||
+        !cloudResourceNoticeSources || !cloudResourceNoticeTargets) return false;
+    const normalize = text => text.replace(/\s+/g, ' ').trim();
+    const text = normalize(el.textContent || '');
+    const firstSentence = cloudResourceNoticeSentences[0];
+    if (!text.startsWith(firstSentence) && !text.startsWith(dictionary[firstSentence])) return false;
+    const protectedContent = 'pre, code, .monaco-editor, textarea, input, script, style, [contenteditable="true"]';
+    if ((el.closest && el.closest(protectedContent)) || el.querySelector(protectedContent)) return false;
+    const links = Array.from(el.querySelectorAll('a, [role="link"]'));
+    if (links.length && (links.length !== cloudResourceNoticeLinks.length ||
+        links.some((link, index) => {
+          const label = cloudResourceNoticeLinks[index];
+          const current = normalize(link.textContent || '');
+          return current !== label && current !== dictionary[label];
+        }))) return false;
+    const sources = links.length ? cloudResourceNoticeSources : [cloudResourceNoticeSources.join('')];
+    const targets = links.length ? cloudResourceNoticeTargets : [cloudResourceNoticeTargets.join('')];
+    const groups = Array.from({length: sources.length}, () => []);
+    let group = 0;
+    const collectText = node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        groups[group].push(node);
+        return;
+      }
+      const linkIndex = links.indexOf(node);
+      if (linkIndex !== -1) group = linkIndex * 2 + 1;
+      Array.from(node.childNodes || []).forEach(collectText);
+      if (linkIndex !== -1) group = linkIndex * 2 + 2;
+    };
+    collectText(el);
+    const values = groups.map(nodes => nodes.map(node => node.textContent).join(''));
+    const current = values.map(normalize);
+    if (groups.some((nodes, index) => !nodes.length ||
+        (current[index] !== normalize(sources[index]) && current[index] !== normalize(targets[index])))) return false;
+    // Reorder wording around the existing links without replacing links or their text nodes.
+    let changed = false;
+    groups.forEach((nodes, index) => {
+      if (values[index] === targets[index]) return;
+      nodes.forEach((node, textIndex) => {
+        const translated = textIndex === 0 ? targets[index] : '';
+        if (node.textContent !== translated) {
+          node.textContent = translated;
+          changed = true;
+        }
+      });
+    });
+    return changed;
+  }
+
+  function repairRestorePageIcon(el) {
+    if (!el || !el.getAttribute || !el.textContent || el.textContent.trim() !== 'restore_page') return false;
+    const host = el.closest && el.closest(
+      '[data-antigravity-icon-host="restore_page"], [class*="material-symbols"], [class*="material-icons"], [data-icon="restore_page"]');
+    if (host) el = host;
+    if (!el.textContent || el.textContent.trim() !== 'restore_page') return false;
+    const protectedContent = 'pre, code, .monaco-editor, textarea, input, script, style, [contenteditable="true"]';
+    if ((el.closest && el.closest(protectedContent)) ||
+        (el.querySelector && el.querySelector(protectedContent))) return false;
+    const iconClass = el.getAttribute('class') || '';
+    const knownIcon = /(?:^|\s)material-(?:symbols|icons)(?:-[a-z]+)?(?:\s|$)/.test(iconClass) ||
+      el.getAttribute('data-icon') === 'restore_page' ||
+      el.getAttribute('data-antigravity-icon-host') === 'restore_page';
+    const menuItem = el.closest && el.closest('[role="menuitem"], [role="option"]');
+    const menuIcon = (el.tagName === 'SPAN' || el.tagName === 'I') && menuItem &&
+      /Reopen Closed Tab|重新打开已关闭的标签页/.test(menuItem.textContent || '');
+    if (!knownIcon && !menuIcon) return false;
+    let svg = el.querySelector('svg[data-antigravity-icon="restore_page"]');
+    if (!svg) {
+      svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const attributes = {
+        viewBox: '0 0 24 24', width: '1em', height: '1em', fill: 'none', stroke: 'currentColor',
+        'stroke-width': '1.7', 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
+        'aria-hidden': 'true', focusable: 'false', 'data-antigravity-icon': 'restore_page'
+      };
+      Object.entries(attributes).forEach(([name, value]) => svg.setAttribute(name, value));
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z M14 2v6h6 M8 14h5a3 3 0 0 1 0 6h-1 M10 12l-2 2 2 2');
+      svg.appendChild(path);
+    }
+    // Preserve the original text nodes so React can still update or remove them.
+    const clearText = node => {
+      if (node.nodeType === Node.TEXT_NODE) node.textContent = '';
+      else Array.from(node.childNodes || []).forEach(clearText);
+    };
+    Array.from(el.childNodes).forEach(clearText);
+    if (!svg.parentNode) el.appendChild(svg);
+    el.setAttribute('data-antigravity-icon-host', 'restore_page');
+    el.style.display = 'inline-flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.style.lineHeight = '1';
+    return true;
+  }
+
   function processNode(node) {
     if (node.nodeType === Node.TEXT_NODE) {
-      // Avoid modifying code snippets or editor content
-      if (node.parentElement && node.parentElement.closest && node.parentElement.closest('pre, code, .monaco-editor')) {
+      // Avoid modifying code snippets or editable user content.
+      if (node.parentElement && node.parentElement.closest &&
+          node.parentElement.closest('pre, code, .monaco-editor, textarea, input, [contenteditable="true"]')) {
         return;
       }
       if (node.parentElement) {
+        if (translateArchiveRestore(node) || translateVoiceChatDuration(node)) return;
+        if (translateArchiveToast(node.parentElement) ||
+            (node.parentElement.parentElement && translateArchiveToast(node.parentElement.parentElement))) return;
+        if (translateInlineNotice(node.parentElement) ||
+            (node.parentElement.parentElement && translateInlineNotice(node.parentElement.parentElement))) return;
+        if (translateVoicePresetPrefix(node)) return;
+        const connectorOwner = connectorCountOwners.get(node);
+        if (connectorOwner && translateConnectorCount(connectorOwner)) return;
+        if (translateConnectorCount(node.parentElement) ||
+            (node.parentElement.parentElement && translateConnectorCount(node.parentElement.parentElement))) return;
+        if (translateCloudResourceNotice(node.parentElement) ||
+            (node.parentElement.parentElement && translateCloudResourceNotice(node.parentElement.parentElement))) return;
+        if (repairRestorePageIcon(node.parentElement)) return;
         if (checkEmptyContainer(node.parentElement) ||
             (node.parentElement.parentElement && checkEmptyContainer(node.parentElement.parentElement))) {
           return;
@@ -766,7 +1487,16 @@ DOM_TRANSLATOR_INJECTION = r"""
       }
     } else if (node.nodeType === Node.ELEMENT_NODE) {
       if (node.tagName === 'SCRIPT' || node.tagName === 'STYLE' || node.tagName === 'CODE' || node.tagName === 'PRE') return;
-      if (checkEmptyContainer(node)) return;
+      if (node.closest && node.closest('.monaco-editor, [contenteditable="true"]')) return;
+      const textArea = node.tagName === 'TEXTAREA';
+      if (!textArea) {
+        translateArchiveToast(node);
+        translateInlineNotice(node);
+        translateConnectorCount(node);
+        translateCloudResourceNotice(node);
+        if (repairRestorePageIcon(node)) return;
+        if (checkEmptyContainer(node)) return;
+      }
       if (node.placeholder) {
         const translated = translateText(node.placeholder);
         if (translated !== node.placeholder) {
@@ -787,7 +1517,7 @@ DOM_TRANSLATOR_INJECTION = r"""
         }
       }
       // Recursively process child nodes
-      Array.from(node.childNodes).forEach(processNode);
+      if (!textArea) Array.from(node.childNodes).forEach(processNode);
     }
   }
 
@@ -823,12 +1553,18 @@ MENU_TRANSLATOR_INJECTION = r"""
     'Check for Updates': '检查更新', 'Checking for Updates...': '正在检查更新...',
     'Downloading Update...': '正在下载更新...', 'Restart to Update': '重启以应用更新',
     'Undo': '撤销', 'Redo': '重做', 'Cut': '剪切', 'Copy': '复制', 'Paste': '粘贴',
+    'Rename': '重命名', 'Pin': '置顶', 'Mark Unread': '标记为未读',
+    'Conversation Name': '对话名称', 'Conversation ID': '对话 ID', 'Project Name': '项目名称',
+    'Copy Project Name': '复制项目名称', 'Project Settings': '项目设置',
+    'Show in File Explorer': '在文件资源管理器中显示',
+    'Archive': '归档', 'Delete': '删除',
     'Select All': '全选', 'Minimize': '最小化', 'Close': '关闭', 'Quit Antigravity': '退出 Antigravity',
     'About Antigravity': '关于 Antigravity', 'Services': '服务', 'Hide Antigravity': '隐藏 Antigravity',
     'Hide Others': '隐藏其他', 'Show All': '显示全部', 'Force Reload': '强制重新加载',
     'Reload': '重新加载', 'Actual Size': '实际大小', 'Zoom In': '放大', 'Zoom Out': '缩小',
     'Toggle Full Screen': '切换全屏',
-    'Split': '分屏', 'Split Right': '向右分屏', 'Split Down': '向下分屏', 'Replace With New': '替换为新建'
+    'Split': '分屏', 'Split Right': '向右分屏', 'Split Down': '向下分屏',
+    'Replace With New': '替换为新建', 'Replace with New': '替换为新建'
   };
   function translateMenu(menuItem) {
     if (menuItem.label && menuTranslationMap[menuItem.label]) {
@@ -906,6 +1642,21 @@ def _inject(stage):
                 'Antigravity Chinese Localization Engine - Menu', 'Menu Translator Injection')
     replace_in_file(stage / 'dist/tray.js', "'Show Antigravity'", "'显示 Antigravity'")
     replace_in_file(stage / 'dist/tray.js', "'Quit'", "'退出'")
+    updater = stage / 'dist/updater.js'
+    if updater.is_file():
+        content = updater.read_text(encoding='utf-8')
+        localized = content
+        # Scope native dialog replacements to display properties, preserving update action keys.
+        for field, original, translated in (
+            ('title', 'Check for Updates', '检查更新'),
+            ('message', 'No updates available', '暂无可用更新'),
+        ):
+            pattern = r"(\b" + field + r"\s*:\s*)(['\"])" + re.escape(original) + r"\2"
+            localized = re.sub(pattern, lambda match: match[1] + match[2] + translated + match[2],
+                               localized)
+        if localized != content:
+            updater.write_text(localized, encoding='utf-8')
+            print('[成功] 已汉化原生更新弹窗 (updater.js)')
     loading = stage / 'dist/loadingOverlay.js'
     if loading.is_file():
         content = loading.read_text(encoding='utf-8')

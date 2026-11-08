@@ -4,9 +4,18 @@
 
 为 Antigravity 桌面端提供中文界面补丁、汉化还原，以及 Windows 代理启动与快捷方式管理。运行脚本使用 Python 标准库，不需要安装 pip 依赖。
 
-本分支基于 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN) 扩展。翻译规则以 v2.21.1 的文件结构为基础，不保证所有版本的文本覆盖率。本次修复针对仓库中的 **Python 源码**；旧版 Release 中的可执行程序需要重新打包后才包含这些修复。
+当前可用的是 **Python 命令行工具**。Windows 图形界面仍处于[规划与设计阶段](doc/design/README.md)，HTML 原型使用示例数据。翻译覆盖与兼容性取决于 Antigravity 版本和文件结构；旧版可执行程序不会自动包含当前源码的改动。
 
-## 本次新增与修复
+## 项目来源与作者
+
+| 角色 | 作者 | 仓库与工作范围 |
+| --- | --- | --- |
+| 上游原作者 | [MIMICTE](https://github.com/MIMICTE) 及上游贡献者 | [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN)，提供原始汉化项目 |
+| 当前分支作者与维护者 | [DemotedHanXin](https://github.com/DemotedHanXin)（Git 提交名 `Demoted_Han_Xin`） | [DemotedHanXin/Antigravity-zh-CN](https://github.com/DemotedHanXin/Antigravity-zh-CN)，在上游基础上扩展翻译、安装校验与还原保护、Windows 代理启动和快捷方式管理，并规划图形界面 |
+
+本仓库是上游项目的派生分支（fork），保留上游贡献与署名。上游及当前分支均使用 MIT 许可证，具体关系见本文末尾。它是社区维护的辅助工具，与 Antigravity 官方产品的发布和支持相互独立。
+
+## 当前功能
 
 - **汉化前验证安装完整性**：检查 ASAR 结构、文件路径和应用入口，补齐 `app.asar.unpacked` 中的外置依赖；先在临时目录完成解包与注入，验证通过后才切换。
 - **保护可运行代码**：缺少或损坏原版归档时停止还原，不再把唯一的 `resources/app` 删除；目录删除失败会报告错误，不再静默提示成功。
@@ -24,7 +33,7 @@
 | --- | --- |
 | 汉化、还原 | Python 3.8+；Windows 或 macOS 的路径与进程处理分支 |
 | 代理启动与快捷方式 | Windows、Python 3.8+、系统自带 Windows PowerShell 与 WScript.Shell |
-| 本次验证环境 | Windows、Python 3.11；macOS 和其他 Antigravity 版本仍需实际验证 |
+| 验证范围 | 当前测试结果见[项目状态](doc/PROJECT_STATUS.md)；macOS 和其他 Antigravity 版本仍需实际验证 |
 
 下载完整仓库，保留脚本依赖：`src/Antigravity-Patcher.py`、`src/Restore.py` 依赖同目录的 `src/antigravity_common.py`；`src/Cleanup-Proxy-Shortcuts.py` 依赖同目录的 `src/Setup-Proxy-Shortcuts.py`。
 
@@ -34,26 +43,26 @@ cd Antigravity-zh-CN
 python --version
 ```
 
-请先保存 Antigravity 中的工作。汉化和还原会关闭目标应用以切换安装文件；`--no-launch` 只禁止完成后的自动启动。代理 Setup/Cleanup 不结束正在运行的软件。
+以下命令均在仓库根目录执行。请先保存 Antigravity 中的工作：汉化和还原会关闭目标应用以切换安装文件，完成后需手动打开软件。`--no-launch` 仅为兼容旧命令保留；无论是否传入，当前脚本均不自动启动软件。代理 Setup/Cleanup 不结束正在运行的软件。
 
 ## 汉化与还原
 
 ```powershell
 # 自动查找安装目录并汉化
-python Antigravity-Patcher.py
+python src/Antigravity-Patcher.py
 
-# 指定包含 Antigravity.exe 的目录；完成后不自动启动
-python Antigravity-Patcher.py --app-dir "D:\Apps\Antigravity" --no-launch
+# 指定包含 Antigravity.exe 的目录
+python src/Antigravity-Patcher.py --app-dir "D:\Apps\Antigravity"
 
 # 恢复英文原版；自定义安装使用同一个目录
-python Restore.py --app-dir "D:\Apps\Antigravity" --no-launch
+python src/Restore.py --app-dir "D:\Apps\Antigravity"
 ```
 
 macOS 使用 `python3`，`--app-dir` 指向整个 `.app`，例如：
 
 ```bash
-python3 Antigravity-Patcher.py --app-dir "/Applications/Antigravity.app" --no-launch
-python3 Restore.py --app-dir "/Applications/Antigravity.app" --no-launch
+python3 src/Antigravity-Patcher.py --app-dir "/Applications/Antigravity.app"
+python3 src/Restore.py --app-dir "/Applications/Antigravity.app"
 ```
 
 汉化会将原版 `resources/app.asar` 改名保留为 `app.asar.disabled`，并生成汉化后的 `resources/app`。**`.disabled` 是恢复原版所需的原始归档，不是代理备份残留，请勿手动删除。** `app.asar.unpacked` 是官方运行依赖，也应保留。
@@ -66,13 +75,13 @@ python3 Restore.py --app-dir "/Applications/Antigravity.app" --no-launch
 
 ```powershell
 # 查看将处理的安装与快捷方式
-python Setup-Proxy-Shortcuts.py --dry-run
+python src/Setup-Proxy-Shortcuts.py --dry-run
 
 # 创建启动器并修改快捷方式
-python Setup-Proxy-Shortcuts.py
+python src/Setup-Proxy-Shortcuts.py
 
 # 自定义安装与快捷方式目录；--scan-root 可以重复使用
-python Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts" --scan-root "E:\Launchers"
+python src/Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts" --scan-root "E:\Launchers"
 ```
 
 脚本扫描当前用户和公共桌面、开始菜单、启动项及 Quick Launch／任务栏中的 `.lnk`，只处理指向所选安装的快捷方式。没有可用开始菜单入口时，会创建个人入口；权限不足的共享入口仍会单独报告。名称相似的其他软件不会被当作 Antigravity。
@@ -84,14 +93,14 @@ python Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\
 ### 清理并改回 EXE 启动
 
 ```powershell
-python Cleanup-Proxy-Shortcuts.py --dry-run
-python Cleanup-Proxy-Shortcuts.py
+python src/Cleanup-Proxy-Shortcuts.py --dry-run
+python src/Cleanup-Proxy-Shortcuts.py
 
 # 旧版启动器没有扫描目录记录时，需要再次提供 --scan-root
-python Cleanup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts"
+python src/Cleanup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts"
 
 # 以后重新启用代理启动
-python Setup-Proxy-Shortcuts.py
+python src/Setup-Proxy-Shortcuts.py
 ```
 
 清理会保留 `.lnk`，将目标改回 `Antigravity.exe`，恢复编码前的启动参数并保留图标、工作目录。所有已扫描的代理入口处理成功后，才删除安装目录下的 `Antigravity-Proxy.cmd` 和 `Antigravity-Proxy.ps1`。
@@ -116,7 +125,7 @@ python Setup-Proxy-Shortcuts.py
 - 系统代理关闭时按直连／TUN 处理，并清除继承的代理环境变量。仅通过环境变量提供代理的配置不属于此方案。
 - 工具不检测代理客户端是否运行、端口是否连通、账号是否可用或目标服务是否可达。
 - 自定义或移动到未知位置的快捷方式需要 `--scan-root`，不能保证找到任意位置、其他用户账户或所有 Windows 固定项。
-- 完成后的自动启动失败，不等于汉化／还原文件修改失败；应根据输出分别判断。`--no-launch` 可用于只处理安装文件。
+- 汉化和还原完成后需手动打开软件；使用代理时从修复后的快捷方式启动。
 - 当前翻译依赖应用文件布局。新版本可能需要调整规则；不承诺所有版本、所有文本或所有平台均已验证。
 
 ## 测试与代码说明
@@ -125,16 +134,14 @@ python Setup-Proxy-Shortcuts.py
 python -B -m unittest discover -s tests -v
 ```
 
-测试使用隔离目录及模拟的进程控制，覆盖归档校验、外置依赖、汉化／还原失败保护、快捷方式参数、扫描目录和不产生代理备份等行为，不应直接对正在使用的安装运行变更测试。
+测试使用隔离目录及模拟的进程控制，覆盖归档校验、外置依赖、汉化／还原失败保护、快捷方式参数、扫描目录和不产生代理备份等行为。部分翻译测试还需要 Node.js 或 Chrome/Edge，环境缺失时会跳过；这些是测试工具，不是运行脚本的 pip 依赖。不应直接对正在使用的安装运行变更测试。
 
 更详细的模块入口、文件状态和维护说明见 [PROJECT_STATUS.md](doc/PROJECT_STATUS.md)。
 
-## 界面示例
-
-![Antigravity 中文界面示例](antigravity-chinese.png)
-
-示例不代表所有版本、动态内容或模型输出均已翻译。新增词条可修改 `src/Antigravity-Patcher.py` 中的翻译字典，再运行汉化脚本。
-
 ## 贡献与许可
 
-参阅 [贡献指南](doc/CONTRIBUTING.md) 和 [MIT License](LICENSE)。问题可提交到 [本分支 Issues](https://github.com/DemotedHanXin/Antigravity-zh-CN/issues)。上游项目为 [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN)。
+新增词条可修改 `src/Antigravity-Patcher.py` 中的翻译字典，再运行汉化脚本。提交方式、翻译约定与测试要求见[贡献指南](CONTRIBUTING.md)，代码变更请提交到[当前分支的 Pull Requests](https://github.com/DemotedHanXin/Antigravity-zh-CN/pulls)。截至 2026-11-08，当前仓库尚未启用 Issues 和 Discussions；问题反馈入口以仓库实际开放情况为准。
+
+上游以 [MIT License](https://github.com/MIMICTE/Antigravity-zh-CN/blob/main/LICENSE) 发布，当前分支沿用 [MIT License](LICENSE)。本仓库保留原版权声明 `Copyright (c) 2026 Antigravity-zh Contributors`；当前作者的维护与新增贡献不替代上游署名。复制或分发本项目及其实质性部分时，应保留版权声明和许可全文；软件按许可证约定以“原样”提供。
+
+本项目的 MIT 许可适用于本项目代码及随附文档，不等于取得 Antigravity 本体、商标或第三方素材的额外授权；这些内容的权利归各自权利人。

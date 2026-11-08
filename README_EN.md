@@ -4,9 +4,18 @@ English | [简体中文](README.md)
 
 Chinese UI localization, restoration, and Windows proxy launcher / shortcut management for Antigravity Desktop. Runtime scripts use the Python standard library; no pip packages are required.
 
-This fork extends [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN). Translation rules target the v2.21.1 layout; text coverage and compatibility with other versions are not guaranteed. These changes apply to **the Python source in this repository**. Previously published executables need rebuilding to include them.
+The available implementation is a set of **Python command-line tools**. The Windows GUI is still in the [planning and design stage](doc/design/README.md), and the HTML prototype uses sample data. Translation coverage and compatibility depend on the Antigravity version and file layout. Older executables do not automatically include changes to the current source.
 
-## New features and repairs
+## Project origin and authors
+
+| Role | Author | Repository and scope |
+| --- | --- | --- |
+| Original upstream author | [MIMICTE](https://github.com/MIMICTE) and upstream contributors | [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN), the original localization project |
+| Current fork author and maintainer | [DemotedHanXin](https://github.com/DemotedHanXin) (Git author name: `Demoted_Han_Xin`) | [DemotedHanXin/Antigravity-zh-CN](https://github.com/DemotedHanXin/Antigravity-zh-CN), extending translations, installation validation and restoration safeguards, Windows proxy launchers and shortcut management, with a planned GUI |
+
+This repository is a fork of the upstream project and retains its attribution. Both upstream and this fork use the MIT License; see the licensing section below. This community tool is maintained independently of the official Antigravity product and its support.
+
+## Current features
 
 - Validate ASAR structure, paths, application entry points and external files from `app.asar.unpacked`. Extract and translate in a staging directory before switching the installed code.
 - Refuse restoration without a valid original archive, keeping a potentially sole working `resources/app`. Report deletion failures instead of silently claiming success.
@@ -24,7 +33,7 @@ See [Project status and code guide](doc/PROJECT_STATUS.md) (Chinese) for the imp
 | --- | --- |
 | Localization / restoration | Python 3.8+; Windows and macOS path / process branches |
 | Proxy and shortcuts | Windows, Python 3.8+, built-in Windows PowerShell and WScript.Shell |
-| Validation for this revision | Windows with Python 3.11; native macOS and other app versions still need validation |
+| Validation scope | See [project status](doc/PROJECT_STATUS.md) for current test results; native macOS and other app versions still need validation |
 
 Download the complete repository. Keep `src/antigravity_common.py` beside `src/Antigravity-Patcher.py` and `src/Restore.py`. Keep `src/Setup-Proxy-Shortcuts.py` beside `src/Cleanup-Proxy-Shortcuts.py`.
 
@@ -34,21 +43,21 @@ cd Antigravity-zh-CN
 python --version
 ```
 
-Save your work first. Localization and restoration stop the target application before switching files. `--no-launch` suppresses only the subsequent automatic launch. Proxy Setup/Cleanup do not stop running applications.
+Run the commands below from the repository root. Save your work first: localization and restoration stop the target application before switching files, and you must open it manually afterward. `--no-launch` remains for compatibility with older commands; the current scripts never launch the application automatically, with or without this flag. Proxy Setup/Cleanup do not stop running applications.
 
 ## Apply and remove localization
 
 ```powershell
-python Antigravity-Patcher.py
-python Antigravity-Patcher.py --app-dir "D:\Apps\Antigravity" --no-launch
-python Restore.py --app-dir "D:\Apps\Antigravity" --no-launch
+python src/Antigravity-Patcher.py
+python src/Antigravity-Patcher.py --app-dir "D:\Apps\Antigravity"
+python src/Restore.py --app-dir "D:\Apps\Antigravity"
 ```
 
 On macOS, use `python3` and select the entire app bundle:
 
 ```bash
-python3 Antigravity-Patcher.py --app-dir "/Applications/Antigravity.app" --no-launch
-python3 Restore.py --app-dir "/Applications/Antigravity.app" --no-launch
+python3 src/Antigravity-Patcher.py --app-dir "/Applications/Antigravity.app"
+python3 src/Restore.py --app-dir "/Applications/Antigravity.app"
 ```
 
 Localization renames the original `resources/app.asar` to `app.asar.disabled` and installs the translated `resources/app`. **The `.disabled` file is the original archive needed for restoration, not leftover proxy backup data. Keep it.** Also retain the official `app.asar.unpacked` dependencies.
@@ -61,13 +70,13 @@ Use this when your proxy client has enabled the **Windows system proxy with an H
 
 ```powershell
 # Preview
-python Setup-Proxy-Shortcuts.py --dry-run
+python src/Setup-Proxy-Shortcuts.py --dry-run
 
 # Deploy launchers and configure shortcuts
-python Setup-Proxy-Shortcuts.py
+python src/Setup-Proxy-Shortcuts.py
 
 # Custom installation and additional shortcut locations
-python Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts" --scan-root "E:\Launchers"
+python src/Setup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts" --scan-root "E:\Launchers"
 ```
 
 Setup scans current-user and shared Desktop, Start Menu and Startup folders, plus Quick Launch / taskbar `.lnk` files. It matches the destination within the selected installation, not the shortcut name. It creates a personal Start Menu entry when no usable matching entry is available and reports shared shortcuts it cannot update.
@@ -79,14 +88,14 @@ Fully exit Antigravity and launch it again through a repaired shortcut after set
 ### Cleanup and EXE shortcuts
 
 ```powershell
-python Cleanup-Proxy-Shortcuts.py --dry-run
-python Cleanup-Proxy-Shortcuts.py
+python src/Cleanup-Proxy-Shortcuts.py --dry-run
+python src/Cleanup-Proxy-Shortcuts.py
 
 # Older launchers may need their original custom roots specified again
-python Cleanup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts"
+python src/Cleanup-Proxy-Shortcuts.py --app-dir "D:\Apps\Antigravity" --scan-root "D:\Shortcuts"
 
 # Recreate the proxy launch setup later
-python Setup-Proxy-Shortcuts.py
+python src/Setup-Proxy-Shortcuts.py
 ```
 
 Cleanup keeps matching `.lnk` files, retargets them to `Antigravity.exe`, decodes the original arguments and retains icons / working directories. It deletes `Antigravity-Proxy.cmd` and `Antigravity-Proxy.ps1` only after all scanned proxy shortcuts have been handled.
@@ -111,7 +120,7 @@ New Setup versions store custom scan roots in a comment inside the existing PS1.
 - When the Windows system proxy is off, the launcher uses direct / TUN behavior and clears inherited proxy variables. Environment-only proxy configurations are outside this design.
 - The tools do not test proxy service availability, port connectivity, account status or destination reachability.
 - Shortcuts moved outside known locations require `--scan-root`. Discovery does not cover arbitrary locations, other user accounts or every Windows pin type.
-- Failure of automatic launch is reported separately from the file changes. Use `--no-launch` for file operations only.
+- Open the application manually after localization or restoration; use a repaired shortcut when proxy launching is needed.
 - Translation depends on the application's file layout. Other versions and native macOS operation still require validation; complete translation of dynamic content or model output is not promised.
 
 ## Tests and code guide
@@ -120,16 +129,14 @@ New Setup versions store custom scan roots in a comment inside the existing PS1.
 python -B -m unittest discover -s tests -v
 ```
 
-Tests use isolated directories and mocked process control. They cover archive validation, external dependencies, localization / restore failure handling, shortcut arguments, scan roots and backup-free proxy operations. Do not run mutation tests against a working installation.
+Tests use isolated directories and mocked process control. They cover archive validation, external dependencies, localization / restore failure handling, shortcut arguments, scan roots and backup-free proxy operations. Some translation tests also require Node.js or Chrome/Edge and are skipped when those tools are unavailable; these are testing tools, not pip dependencies for running the scripts. Do not run mutation tests against a working installation.
 
 See [PROJECT_STATUS.md](doc/PROJECT_STATUS.md) for module responsibilities, file states and maintenance notes.
 
-## Screenshot
-
-![Antigravity Chinese UI example](antigravity-chinese.png)
-
-This example does not imply complete translation of every version or generated content. Add translations to the dictionary in `src/Antigravity-Patcher.py`, then reapply the patch.
-
 ## Contributing and license
 
-See [CONTRIBUTING.md](doc/CONTRIBUTING.md) and the [MIT License](LICENSE). Report issues in [this fork](https://github.com/DemotedHanXin/Antigravity-zh-CN/issues). Original project: [MIMICTE/Antigravity-zh-CN](https://github.com/MIMICTE/Antigravity-zh-CN).
+Add translations to the dictionary in `src/Antigravity-Patcher.py`, then reapply the patch. See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution steps, terminology and testing requirements. Submit code changes through [this fork's Pull Requests](https://github.com/DemotedHanXin/Antigravity-zh-CN/pulls). As of 2026-11-08, Issues and Discussions are not enabled in this fork; use the feedback channels actually available on the repository.
+
+Upstream is published under the [MIT License](https://github.com/MIMICTE/Antigravity-zh-CN/blob/main/LICENSE), and this fork continues under the [MIT License](LICENSE). The original notice, `Copyright (c) 2026 Antigravity-zh Contributors`, is retained. The current maintainer's work does not replace upstream attribution. Copies or substantial portions of the project must retain the copyright notice and full license; the software is provided “as is” under those terms.
+
+The project's MIT License covers its code and accompanying documentation. It does not grant additional rights to the Antigravity application, trademarks or third-party assets, whose rights remain with their respective owners.

@@ -7,14 +7,16 @@ import json
 from pathlib import Path
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
 
-from src import antigravity_common as common
-
 ROOT = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location('patcher', ROOT / 'Antigravity-Patcher.py')
+sys.path.insert(0, str(ROOT / 'src'))
+import antigravity_common as common
+
+SPEC = importlib.util.spec_from_file_location('patcher', ROOT / 'src' / 'Antigravity-Patcher.py')
 PATCHER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(PATCHER)
 
@@ -66,7 +68,7 @@ class LocalizationTests(unittest.TestCase):
         self.output.__enter__()
         self.stop = mock.patch.object(PATCHER, 'stop_application')
         self.stop_mock = self.stop.start()
-        self.launch = mock.patch.object(PATCHER, 'launch_application')
+        self.launch = mock.patch.object(PATCHER, 'launch_application', create=True)
         self.launch_mock = self.launch.start()
 
     def tearDown(self):
@@ -103,6 +105,35 @@ class LocalizationTests(unittest.TestCase):
         self.assertFalse((self.work / 'index.js').exists())
         self.assertEqual((self.work / 'node_modules/dependency.js').read_bytes(), b'dep')
         self.assert_no_temporary()
+
+    def test_native_update_dialog_preserves_action_keys_and_repeated_injection(self):
+        for index, (quote, spacing) in enumerate([("'", ' '), ('"', '')]):
+            with self.subTest(quote=quote, spacing=spacing):
+                stage = self.root / f'stage-{index}'
+                dist = stage / 'dist'
+                dist.mkdir(parents=True)
+                for name in ('preload.js', 'menu.js', 'tray.js'):
+                    (dist / name).write_text('// fixture', encoding='utf-8')
+                source = (
+                    f'const MenuUpdateStep = {{CheckForUpdates: {quote}Check for Updates{quote}}};\n'
+                    f'const options = {{title:{spacing}{quote}Check for Updates{quote}, '
+                    f'message:{spacing}{quote}No updates available{quote}, buttons: ["OK"]}};\n'
+                    'const detail = "No updates available";\n'
+                )
+                updater = dist / 'updater.js'
+                updater.write_text(source, encoding='utf-8')
+                PATCHER._inject(stage)
+                expected = source.replace(
+                    f'title:{spacing}{quote}Check for Updates{quote}',
+                    f'title:{spacing}{quote}检查更新{quote}',
+                ).replace(
+                    f'message:{spacing}{quote}No updates available{quote}',
+                    f'message:{spacing}{quote}暂无可用更新{quote}',
+                )
+                self.assertEqual(updater.read_text(encoding='utf-8'), expected)
+                snapshot = updater.read_bytes()
+                PATCHER._inject(stage)
+                self.assertEqual(updater.read_bytes(), snapshot)
 
     def test_missing_archive_preserves_only_working_app(self):
         self.old_app()

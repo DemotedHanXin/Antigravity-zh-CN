@@ -1,6 +1,6 @@
 # 项目状态与代码说明
 
-更新日期：2026-10-26。本文对应当前仓库源码，旧 Release 二进制文件需要重新构建后才能包含本次修复。日常使用命令见 [README.md](../README.md)，英文说明见 [README_EN.md](../README_EN.md)。
+更新日期：2026-11-08。本文对应当前工作区源码与设计文件；工作区中的新增和修改不代表已经提交、发布或打包。日常使用命令见 [README.md](../README.md)，英文说明见 [README_EN.md](../README_EN.md)，维护约定见 [CONTRIBUTING.md](../CONTRIBUTING.md)。
 
 ## 1. 项目当前负责什么
 
@@ -10,6 +10,16 @@
 2. **Windows 代理启动与清理**：创建代理启动文件，调整快捷方式；需要时将快捷方式改回 EXE，并删除代理启动文件。
 
 汉化不会替用户配置代理客户端，代理工具也不修改汉化词典或 ASAR。代理工具不生成永久备份；汉化保留的 `app.asar.disabled` 则是原版代码的改名，是还原所必需的文件。
+
+| 模块 | 当前状态 |
+| --- | --- |
+| Python 命令行工具 | 汉化、还原、Windows 代理启动器与快捷方式管理均已有源码 |
+| 翻译规则与注入引擎 | 词条、动态文本、原生菜单、提示链接及图标修复已有实现；验证结果见第 7 节 |
+| Windows 图形界面 | 处于规划和设计阶段，`app/` 目前为空，尚无可运行的 PySide6 应用 |
+| 界面预览 | 已有 HTML 示例原型和三张 PNG 设计稿，不连接真实安装、网络检测或词典存储 |
+| 打包发布 | 本轮未重新构建或发布可执行文件；现有 macOS 构建流程仍需同步 `src/` 路径 |
+
+汉化和还原在需要切换安装文件时会关闭目标应用，**完成后始终不自动启动**；保留的 `--no-launch` 仅用于兼容旧命令。需要使用时由用户手动启动 Antigravity。代理 Setup/Cleanup 不关闭正在运行的应用。
 
 ### 已处理的主要问题
 
@@ -26,6 +36,17 @@
 | Setup 自身仍积累代理备份 | 移除新建备份和备份还原功能，重新启用依靠 Setup 再生成 |
 | 公共快捷方式权限不足，没有可用个人入口 | 尝试个人开始菜单回退，同时保留未处理入口的错误状态 |
 
+### 当前源码中的翻译改进
+
+- 补充项目排序、对话操作、文件审阅、语音、模型、插件与自动化相关界面词条。
+- 处理剩余百分比、连接器数量、带快捷键的提示、语音预设和动态删除说明，保留名称、数量与快捷键值。
+- 插件市场描述支持完整文本、换行文本及足够明确的截断前缀；不明确的短前缀不做猜测替换。
+- 对跨文本节点的提示、云资源说明与连接器计数进行定向翻译，保留既有链接和可交互节点；对应浏览器验证仍有环境阻碍，见第 7 节。
+- 原生菜单翻译保留菜单动作；原生更新弹窗只替换显示字段；`restore_page` 图标有定向 SVG 修复逻辑。
+- DOM 遍历避开代码块、Monaco 编辑器与可编辑正文，输入框占位文字可以翻译。上述保护不能替代真实应用页面的验收。
+
+翻译词典和规则目前仍内嵌在 `src/Antigravity-Patcher.py`，尚未迁移为可编辑 JSON 词典，也没有已实现的图形词典编辑器。
+
 ## 2. 源码结构
 
 | 文件 | 职责与主要入口 |
@@ -36,8 +57,10 @@
 | [Setup-Proxy-Shortcuts.py](../src/Setup-Proxy-Shortcuts.py) | 启动器模板、Windows 快捷方式 COM 桥接、扫描、策略检查、目录元数据与 `install()` |
 | [Cleanup-Proxy-Shortcuts.py](../src/Cleanup-Proxy-Shortcuts.py) | 加载同目录 Setup 工具函数；`plan_cleanup()` 计划修改，`apply_cleanup()` 改回 EXE 后删除启动器 |
 | [tests](../tests) | 隔离样例与回归测试，不以真实安装作为写入目标 |
+| [design](design/README.md) | Windows 应用规划、样式规范、HTML/PNG 预览与统一素材目录 |
+| [build-mac.yml](../.github/workflows/build-mac.yml) | 现有 macOS PyInstaller 工作流；构建命令仍指向根目录脚本，需更新后再验证 |
 
-汉化和还原通过普通 Python 导入共享模块，因此分发源码时必须包含 `../src/antigravity_common.py`。Cleanup 使用 `runpy.run_path()` 读取同目录 Setup 的定义，不会执行它的命令行入口。
+上表中的工具脚本均在仓库根目录的 `src/` 下，运行时使用 `python src/脚本名.py`。汉化和还原通过普通 Python 导入共享模块，因此分发源码时必须包含 `src/antigravity_common.py`。Cleanup 使用 `runpy.run_path()` 读取同目录 Setup 的定义，不会执行它的命令行入口。
 
 ### 公共模块的关键函数
 
@@ -47,7 +70,7 @@
 - `extract_asar(...)`：写入空的暂存目录，包括外置依赖；不会把不完整提取结果当作可用安装。
 - `validate_extracted_app(...)`：检查解包入口及调用者指定的必要汉化目标文件。
 - `remove_tree(path, parent)`：确认目标是预期父目录中的子目录，拒绝符号链接/重解析点，删除失败不忽略。
-- `stop_application(app_dir)` / `launch_application(app_dir)`：针对所选安装处理进程；代理启动器存在时检查其执行结果，文件修改完成与启动成功分别判断。
+- `stop_application(app_dir)`：只关闭所选安装的进程。公共模块仍保留 `launch_application(app_dir)` 辅助函数及其回归测试，但当前 Patcher/Restore 流程不调用它。
 
 ## 3. 汉化与还原的文件状态
 
@@ -121,14 +144,30 @@
 | 工具 | 参数 | 说明 |
 | --- | --- | --- |
 | Patcher / Restore | `--app-dir` | 明确选择安装目录或 macOS `.app` |
-| Patcher / Restore | `--no-launch` | 文件操作完成后不自动启动；不等于禁止操作前关闭应用 |
+| Patcher / Restore | `--no-launch` | 兼容旧命令；当前无论是否传入都不自动启动，不影响切换前关闭应用 |
 | Setup / Cleanup | `--app-dir` | 选择包含 `Antigravity.exe` 的 Windows 安装目录 |
 | Setup / Cleanup | `--scan-root` | 额外扫描快捷方式目录，可重复使用 |
 | Setup / Cleanup | `--dry-run` | 预览，不创建、修改或删除安装文件及快捷方式 |
 
-两条恢复操作的用途不同：`../src/Restore.py` 恢复英文界面；`src/Cleanup-Proxy-Shortcuts.py` 退出代理启动方式。后者不操作汉化归档，前者不清理代理快捷方式。
+两条恢复操作的用途不同：`src/Restore.py` 恢复英文界面；`src/Cleanup-Proxy-Shortcuts.py` 退出代理启动方式。后者不操作汉化归档，前者不清理代理快捷方式。
 
-## 6. 验证方式与当前边界
+## 6. Windows 应用设计与目录约定
+
+设计资料统一放在 [design/](design/README.md)：
+
+| 位置 | 用途 |
+| --- | --- |
+| [WINDOWS_APP_PLAN.md](design/WINDOWS_APP_PLAN.md) | 面向普通用户的 Windows 应用范围、流程与开发阶段规划 |
+| [FRONTEND_STYLE_PLAN.md](design/FRONTEND_STYLE_PLAN.md) | 虹光日夜主题、组件状态、布局与 Qt 验收标准 |
+| [frontend-style-preview.html](design/frontend-style-preview.html) | 浏览器交互预览，使用内存中的示例数据，刷新即重置 |
+| `design/ui-*.png` | 与 HTML 同级的三张界面效果预览，属于设计稿 |
+| [assets/](design/assets/) | 三张原始插画/背景、来源清单 `manifest.json` 和设计参数 `frontend-tokens.json` |
+
+`design/` 根目录保留设计文档与预览效果，输入素材及配套数据集中到 `design/assets/`。打开 HTML 时应保留整个目录结构；设计参数用于实现参考，不是当前 CLI 的运行配置。
+
+状态首页、首次引导、圆角卡片、日夜主题和词典编辑页面已形成设计方案。Python + PySide6、JSON 词典覆盖层及 PyInstaller 打包仍是待实施方案；HTML 交互不代表真实功能已经完成。浏览器原型操作、Qt 实现、DPI、键盘及读屏验收仍需按设计文档逐项进行。
+
+## 7. 验证方式与当前边界
 
 运行回归测试：
 
@@ -136,30 +175,48 @@
 python -B -m unittest discover -s tests -v
 ```
 
-本轮验证以 Windows、Python 3.11 为基础，使用隔离的模拟安装、原生 PowerShell 和真实 COM 快捷方式检查。真实 Antigravity 安装只做只读检查，未用于汉化、还原或清理写入测试。测试覆盖包括：
+2026-11-08 在 Windows 上使用本仓库 `.venv` 的 Python **3.12.10**、Node.js **v24.15.0** 执行完整回归：
+
+```powershell
+.\.venv\Scripts\python.exe -B -m unittest discover -s tests -v
+```
+
+结果为 **105 项：100 项通过、5 项失败、0 项跳过**。5 项失败均发生在启动隔离浏览器时：Chrome Crashpad 报 `crash server failed to launch, self-terminating`，进程退出码为 `4294930433`。测试未到达 DOM 内容断言，不能据此判断对应翻译逻辑是否正确，也不能计为通过。
+
+| 检查范围 | 本轮结果 |
+| --- | --- |
+| 汉化、还原、归档校验、代理快捷方式与原生 PowerShell 检查 | 通过 |
+| Node.js 执行的动态文本与原生菜单翻译 | 通过，包括插件描述完整/截断/换行匹配 |
+| 云资源说明、连接器计数、图标修复、内联提示、语音选择的浏览器 DOM 检查 | 5 项因浏览器启动失败未完成；对应 `test_cloud_resource_notice.py`、`test_connector_count.py`、`test_icon_repair.py`、`test_inline_notices.py`、`test_voice_selection.py` |
+
+脚本运行只使用 Python 标准库；Node.js 和 Chrome/Edge 是部分测试的附加依赖，不是 CLI 使用条件。测试使用隔离的模拟安装和快捷方式，进程控制及快捷方式写入采用模拟；另有原生 PowerShell 的代理解析和策略读取检查。本轮没有对真实 Antigravity 安装执行汉化、还原、代理配置或清理，也没有重做真实 COM 快捷方式写入验收。
+
+测试覆盖包括：
 
 - 完整/截断/无效的 ASAR、越界路径、缺失主入口、外置依赖复制与校验。
 - 无原始归档时保留唯一代码、归档冲突停止、注入/改名/删除失败的处理。
-- 自定义安装目录、CLI 参数和启动失败报告。
+- 自定义安装目录、CLI 参数、不自动启动行为，以及保留的启动辅助函数的失败报告。
 - 快捷方式中文/引号参数、路径匹配、并发修改保护、失败时保留启动器。
 - 无代理备份的创建→清理→重新创建，自定义扫描目录保留与验证。
 - 受限 PowerShell 策略在修改前停止，公共入口失败时个人入口回退。
-
-本次交付的回归测试共 **86 项**。另外进行了两轮“汉化→再次汉化→还原”的联合验证，以及真实 Windows COM 的“代理创建→清理→重新创建”验证；正常完成后未留下测试目录或代理备份。Python 3.8 语法解析与本文档本地链接检查通过。
-
-只读样本中的官方应用版本为 **2.26.0**，主入口为 `dist/main.js`，归档索引包含 1,075 个文件，其中 347 个为外置文件；完整归档与外置依赖校验通过。这是结构和文件完整性验证结果，不代表已对该版本的全部界面和功能做运行验收。
+- 动态翻译值保留、重复执行稳定性、原生菜单动作保留、更新弹窗显示字段与动作键分离。
 
 这些检查不能替代所有系统和软件版本上的实际运行验证。仍有以下边界：
 
 - macOS 的路径和进程分支保留，但本轮未在 macOS 真机运行；Python 3.8 的最低兼容声明仍需对应解释器验证。
+- 翻译依赖特定应用文件布局；当前测试不等于已对某个官方版本完成全部界面和功能验收。
 - PAC、纯 SOCKS 系统配置、仅环境变量代理、代理端口/目标服务连通性不在自动修复范围内。
 - 企业执行策略、安装目录权限和系统固定项存储形式可能阻止某些步骤；工具会报告已知失败条件，不擅自放宽安全设置。
 - 未知位置或其他用户账户的快捷方式不能保证被自动发现。
 - 强制终止或系统掉电仍可能留下暂存目录；无法删除或回滚的目录会保留以免丢失可恢复代码。
 - 对不同归档格式、新版应用文件布局或不支持的链接条目，应停止而不是猜测后继续覆盖。
-- 本次没有发布 Release，也没有重新构建旧版 EXE；分享修复时应分发本次完整源码或重新打包。
+- 本次没有发布 Release，也没有重新构建旧版 EXE；分享修复时应分发完整源码或在修复构建流程后重新打包。
 
-## 7. 后续维护建议
+## 8. 后续维护事项
+
+1. 在可正常启动 Chrome/Edge 的环境中重跑 5 项 DOM 测试，再进行目标应用页面验收。
+2. 将 macOS 工作流的 PyInstaller 输入路径同步为 `src/` 中的实际入口，并验证公共模块打包和两个架构产物；当前工作流不能作为可发布证明。
+3. 按 Windows 应用计划实现服务层、图形界面与 JSON 词典方案；保留 CLI 行为及失败恢复约束。
 
 新增翻译优先修改 Patcher 中的字典与注入代码；新增归档处理逻辑放在公共模块；Windows 启动器与 COM 桥接集中在 Setup。修改涉及安装文件切换时，应先添加失败路径回归测试，再考虑正常流程。
 

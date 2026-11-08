@@ -1,0 +1,32 @@
+{
+  "version": "1.2",
+  "assets": [
+    {
+      "name": "Gemini_Poster_Clean.png",
+      "sha256": "897769f95a8f4a9fa7d2d313a27899d7e43b2fe619fc57a2622be095c1ebe4ea",
+      "bytes": 1902787,
+      "width": 1024,
+      "height": 1535,
+      "source": "user-supplied local reference",
+      "transformation": "none; byte-identical copy"
+    },
+    {
+      "name": "Gemini_Background_Light_1920x1080.png",
+      "sha256": "484e858602b23d76491898cc69260aa51814210fc774bf1163eb12fcf24652c3",
+      "bytes": 2156919,
+      "width": 1920,
+      "height": 1080,
+      "source": "user-supplied local reference",
+      "transformation": "none; byte-identical copy"
+    },
+    {
+      "name": "Gemini_Background_Dark_1920x1080.png",
+      "sha256": "39d9684b26a14e932230903ecaee39b7ebd20efc4ea31e67fecc257db16831d4",
+      "bytes": 2206851,
+      "width": 1920,
+      "height": 1080,
+      "source": "user-supplied local reference",
+      "transformation": "none; byte-identical copy"
+    }
+  ]
+}

@@ -6,13 +6,15 @@ import json
 from pathlib import Path
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
 
 
 WORKSPACE = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location('restore_application', WORKSPACE / 'Restore.py')
+sys.path.insert(0, str(WORKSPACE / 'src'))
+SPEC = importlib.util.spec_from_file_location('restore_application', WORKSPACE / 'src' / 'Restore.py')
 TOOL = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(TOOL)
 
@@ -54,7 +56,7 @@ class RestoreTests(unittest.TestCase):
         self.stack.enter_context(mock.patch.object(TOOL, 'discover_install', return_value=self.root))
         self.stack.enter_context(mock.patch.object(TOOL, 'resources_dir', return_value=self.resources))
         self.stop = self.stack.enter_context(mock.patch.object(TOOL, 'stop_application'))
-        self.launch = self.stack.enter_context(mock.patch.object(TOOL, 'launch_application'))
+        self.launch = self.stack.enter_context(mock.patch.object(TOOL, 'launch_application', create=True))
 
     def tearDown(self):
         self.stack.close()
@@ -134,7 +136,7 @@ class RestoreTests(unittest.TestCase):
         self.assertEqual(TOOL.restore(self.root), 0)
         self.assertEqual(self.archive.read_bytes(), expected)
         self.assertFalse(self.application.exists())
-        self.launch.assert_called_once_with(self.root)
+        self.launch.assert_not_called()
 
     def test_stop_failure_changes_no_files(self):
         write_asar(self.disabled)
@@ -273,14 +275,13 @@ class RestoreTests(unittest.TestCase):
         self.assertEqual(TOOL.main(['--app-dir', str(self.root), '--no-launch']), 0)
         self.launch.assert_not_called()
 
-    def test_launch_failure_is_reported_after_safe_restore(self):
+    def test_cli_default_restores_without_launching(self):
         write_asar(self.disabled)
         self.launch.side_effect = RuntimeError('fixture proxy policy denied')
-        self.assertEqual(TOOL.main(['--app-dir', str(self.root)]), 1)
+        self.assertEqual(TOOL.main(['--app-dir', str(self.root)]), 0)
         self.assertTrue(self.archive.exists())
         self.assertFalse(self.application.exists())
-        self.assertIn('自动启动未完成', self.output.getvalue())
-        self.assertIn('proxy policy denied', self.output.getvalue())
+        self.launch.assert_not_called()
 
     def test_process_timeout_has_failure_exit_code_without_losing_code(self):
         write_asar(self.disabled)

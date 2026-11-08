@@ -1,0 +1,123 @@
+{
+  "version": "1.2",
+  "status": "design-spec-not-runtime-config",
+  "style": "iridescent-day-night-rounded-cards",
+  "units": "logical-px",
+  "themes": {
+    "light": {
+      "canvas": "#F4F3FC",
+      "surface": "#FFFFFF",
+      "subtle": "#EDEBF8",
+      "text": "#292B46",
+      "secondary": "#60647E",
+      "border": "#DEDEEF",
+      "controlBorder": "#7B7F9D",
+      "accent": "#6554BC",
+      "onAccent": "#FFFFFF",
+      "accentHover": "#5544A5",
+      "accentPressed": "#43358D",
+      "accentSoft": "#EDE8FC",
+      "success": "#236846",
+      "successBg": "#E7F4EB",
+      "warning": "#895A12",
+      "warningBg": "#FFF4DD",
+      "danger": "#B43C36",
+      "dangerBg": "#FFF0ED",
+      "info": "#315F9C",
+      "infoBg": "#EEF4FF"
+    },
+    "dark": {
+      "canvas": "#10142C",
+      "surface": "#1B2142",
+      "subtle": "#262E52",
+      "text": "#F1F1FF",
+      "secondary": "#B9C1DE",
+      "border": "#3A456B",
+      "controlBorder": "#7D88B3",
+      "accent": "#BFB3FF",
+      "onAccent": "#221C47",
+      "accentHover": "#D2C9FF",
+      "accentPressed": "#A798EE",
+      "accentSoft": "#36305B",
+      "success": "#A2DEB7",
+      "successBg": "#243C2D",
+      "warning": "#EBC77E",
+      "warningBg": "#403521",
+      "danger": "#FFB4AB",
+      "dangerBg": "#472B2A",
+      "info": "#AFCEFF",
+      "infoBg": "#28394E"
+    }
+  },
+  "spacing": [
+    4,
+    8,
+    12,
+    16,
+    24,
+    32
+  ],
+  "radius": {
+    "card": 16,
+    "control": 10,
+    "banner": 12,
+    "badge": 8
+  },
+  "typography": {
+    "pageTitle": 26,
+    "sectionTitle": 18,
+    "cardTitle": 16,
+    "body": 14,
+    "caption": 12,
+    "technical": 13,
+    "heroTitle": 36,
+    "heroCompact": 30
+  },
+  "dimensions": {
+    "initialWidth": 1280,
+    "initialHeight": 820,
+    "compactWidth": 720,
+    "compactHeight": 480,
+    "sidebar": 208,
+    "sidebarCompact": 72,
+    "pagePadding": 32,
+    "pagePaddingCompact": 16,
+    "cardPadding": 20,
+    "cardGap": 16,
+    "controlHeight": 40,
+    "toolHeight": 32,
+    "navHeight": 44,
+    "tableRowHeight": 44,
+    "tableHeaderHeight": 36,
+    "editorMinWidth": 320,
+    "editorMaxWidth": 400
+  },
+  "breakpoints": {
+    "sidebarWindowWidth": 900,
+    "overviewContentWidth": 600,
+    "dictionaryContentWidth": 840
+  },
+  "motionMs": {
+    "hover": 120,
+    "dialog": 160
+  },
+  "defaultTheme": "system",
+  "fontScaleOptions": [
+    1,
+    1.15,
+    1.3
+  ],
+  "artwork": {
+    "light": "assets/Gemini_Background_Light_1920x1080.png",
+    "dark": "assets/Gemini_Background_Dark_1920x1080.png",
+    "referencePoster": "assets/Gemini_Poster_Clean.png",
+    "overviewContentMaxWidth": 760,
+    "overviewArtReserve": 340,
+    "fullArtworkMinWindowWidth": 1280,
+    "backgroundPosition": "right center",
+    "neutralModeAvailable": true,
+    "dataSurfaceOpacity": 1,
+    "lightNavigationOpacity": 0.94,
+    "darkNavigationOpacity": 0.96
+  }
+}
